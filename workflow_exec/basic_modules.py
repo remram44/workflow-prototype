@@ -167,3 +167,22 @@ class AddPrevious(Module):
             self._request_input('number')
         else:
             super(AddPrevious, self).input(port, value)
+
+
+class Format(Module):
+    """Formats elements using format string from parameters.
+    """
+    def start(self):
+        self._format = self.parameters['format']
+        self._args = []
+        self._request_input('element')
+
+    def input(self, port, value):
+        if port == 'element':
+            self._args.append(value)
+            self._request_input('element')
+        else:
+            super(Format, self).input(port, value)
+
+    def input_end(self, port):
+        self._output('string', self._format.format(*self._args))
