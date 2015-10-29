@@ -1,7 +1,7 @@
 class Module(object):
-    def __init__(self, parameters, interpreter):
+    def __init__(self, parameters, interface):
         self.parameters = parameters
-        self._interpreter = interpreter
+        self._interface = interface
 
     def start(self):
         pass
@@ -19,11 +19,10 @@ class Module(object):
         pass
 
     def _request_input(self, port, nb=1):
-        todo
+        self._interface.module_requests_input(port, nb)
 
     def _output(self, port, value):
-        todo
-        return True
+        return self._interface.module_produces_output(port, value)
 
     def _finish(self):
-        todo
+        self._interface.module_reports_finish()
