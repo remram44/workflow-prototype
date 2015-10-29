@@ -15,7 +15,7 @@ class Count(Module):
         else:
             super(Count, self).input(port, value)
 
-    def finish(self):
+    def finish(self, reason):
         self._output('length', self.counter)
 
 
@@ -75,7 +75,7 @@ class ReadFile(Module):
             if not self._output('line', line):
                 break
 
-    def finish(self):
+    def finish(self, reason):
         self._file.close()
 
 

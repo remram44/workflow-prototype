@@ -12,9 +12,9 @@ class Module(object):
         pass
 
     def step(self):
-        raise TypeError("step method not provided")
+        pass
 
-    def finish(self):
+    def finish(self, reason):
         pass
 
     def _request_input(self, port, nb=1):
