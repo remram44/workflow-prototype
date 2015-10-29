@@ -1,5 +1,6 @@
 class Module(object):
-    def __init__(self, interpreter):
+    def __init__(self, parameters, interpreter):
+        self.parameters = parameters
         self._interpreter = interpreter
 
     def start(self):

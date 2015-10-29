@@ -1,6 +1,14 @@
 from workflow_exec.module import Module
 
 
+class Constant(Module):
+    """Outputs a single value set as parameter.
+    """
+    def start(self):
+        self._output('value', self.parameters['value'])
+        self._finish()
+
+
 class Count(Module):
     """Counts the number of elements in the input stream.
     """
@@ -95,15 +103,16 @@ class RandomNumbers(Module):
 
 
 class Sample(Module):
-    """Lets one element through every 10 elements.
+    """Lets one element through every N elements (configured with parameter).
     """
     def start(self):
         self._pos = 1
+        self._rate = self.parameters['rate']
         self._request_input('data')
 
     def input(self, port, value):
         if port == 'data':
-            if self._pos == 10:
+            if self._pos == self._rate:
                 self._pos = 1
                 self._output('sampled', value)
             else:
