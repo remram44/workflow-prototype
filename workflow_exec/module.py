@@ -33,6 +33,8 @@ class Module(object):
         This is called by the interpreter if `_output()` was called and
         returned False.
         """
+        # If this is called and the input streams are done, stop execution
+        self._interface.module_step_unimplemented()
 
     def finish(self, reason):
         """Ends execution of the module.
