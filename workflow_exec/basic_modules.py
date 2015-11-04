@@ -186,3 +186,25 @@ class Format(Module):
 
     def input_end(self, port):
         self._output('string', self._format.format(*self._args))
+
+
+from workflow_exec.inline_module import inline_module, EndOfInput
+
+
+@inline_module
+def ZipLongest(module, parameters):
+    try:
+        while True:
+            left, right = yield module.get_input('left', 'right')
+            yield module.output('zip', (left, right))
+    except EndOfInput, e:
+        if 'left' in e.ports:
+            while True:
+                right = yield module.get_input('right')
+                yield module.output('zip', (None, right))
+        else:
+            while True:
+                left = yield module.get_input('left')
+                yield module.output('zip', (left, None))
+
+print(ZipLongest)
