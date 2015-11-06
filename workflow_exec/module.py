@@ -17,6 +17,7 @@ class Module(object):
         input and start output from here, then rely on the other events the
         interpreter will trigger later.
         """
+        raise NotImplementedError
 
     def input(self, port, value):
         """Handle an input on a port.
