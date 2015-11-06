@@ -23,7 +23,7 @@ class Count(Module):
         else:
             super(Count, self).input(port, value)
 
-    def finish(self, reason):
+    def all_input_end(self):
         self._output('length', self.counter)
 
 

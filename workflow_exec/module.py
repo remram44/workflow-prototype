@@ -1,3 +1,9 @@
+class FinishReason(object):
+    TERMINATE = 1
+    ALL_OUTPUT_DONE = 2
+    CALLED_FINISH = 3
+
+
 class Module(object):
     """Base class for Python module implementations.
     """
@@ -28,6 +34,14 @@ class Module(object):
         """Handle the end of the input on a port.
         """
 
+    def all_input_end(self):
+        """There is no port left they might still receive input.
+
+        If this module produces data in `input()`, you should probably call
+        `_finish()`. If this module is a collecter, it has received all the
+        input and can now produce its result.
+        """
+
     def step(self):
         """Produce more output.
 
@@ -40,22 +54,14 @@ class Module(object):
     def finish(self, reason):
         """Ends execution of the module.
 
-        This doesn't necessary means that the module is finish.
-
         `reason` can be either:
-        * `ALL_INPUT_DONE`: all the input streams are done. If this module
-          produces data in `input()`, you should probably call `_finish()`. If
-          this module is a collecter, it has received all the input and can now
-          produce its result.
         * `TERMINATE`: there was an error or the execution was aborted, the
           module should finish quickly. Any more output will likely get
           ignored.
         * `ALL_OUTPUT_DONE`: the output streams have no more readers. This
-          module can safely call `_finish()` early.
-
-        Note that it is safe to continue producing output after this, or from
-        this method. `step()` will continue getting called if `output()`
-        returns False.
+          module can safely call `_finish()` early, else it will keep getting
+          called.
+        * `CALLED_FINISH`: you called `_finish()`.
         """
 
     def _request_input(self, port, nb=1):
