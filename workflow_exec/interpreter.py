@@ -1,43 +1,208 @@
+from workflow_exec.module import FinishReason
+
+
 class InstanciatedModule(object):
-    def __init__(self, class_, parameters=None):
+    """A module in the workflow, that consumes inputs and produces outputs.
+
+    This wraps the Module object defined by users.
+    """
+    def __init__(self, interpreter, class_, parameters=None):
+        self._interpreter = interpreter
         if parameters is None:
-            parameters = {}
+            self._parameters = {}
+        else:
+            self._parameters = parameters
         self.up = {}
         self.down = {}
-        self._instance = class_(parameters, self)
+        self._class = class_
+        self._instance = None
+
+        self._expected_input = {}
+        self._expect_to_output = False
+
+    def start(self):
+        self._instance = self._class(self._parameters, self)
+        self._instance.start()
+        self._interpreter.started_modules.add(self)
+
+        if not self._expected_input and not self._expect_to_output:
+            raise RuntimeError("Module isn't waiting for any event but isn't "
+                               "finished (after start())")
+
+    def module_step_unimplemented(self):
+        # If all upstream streams are done, do module_reports_finish()
+        for port, stream in self.up.iteritems():
+            if stream.producing:
+                return
+
+        self.module_reports_finish()
+
+    def module_requests_input(self, port, nb):
+        self._expected_input[port] = self._expected_input.get(port, 0) + nb
+        # TODO: call input() sometime
+
+    def module_produces_output(self, port, value):
+        if port not in self.down:
+            return True
+        stream = self.down[port]
+        ret = stream.push(value)
+        if not ret:
+            self._expect_to_output = True
+            # TODO: call step() sometime
+            pass
+        return ret
+
+    def module_reports_finish(self):
+        for port, stream in self.down.iteritems():
+            stream.close()
+        self._interpreter.ready_tasks.append(
+            FinishTask(self, FinishReason.CALLED_FINISH))
+
+    def finish(self, reason):
+        if reason != FinishReason.ALL_OUTPUT_DONE:
+            self._interpreter.started_modules.remove(self)
+        self._instance.finish(reason)
+
+
+class Stream(object):
+    """A stream between two ports.
+
+    This is the connection between one producer and multiple consumers. It is
+    essentially a buffer.
+    """
+    def __init__(self, producer_module, producer_port):
+        self.producer_module = producer_module
+        self.producer_port = producer_port
+
+        # Whether this stream is still open; True until the producer finishes
+        self.producing = True
+
+        # Maps (module, port) to reading position
+        self.consumers = {}
+        self.position = 0
+
+        self.buffer = []
+        self.target_size = 1
+
+    def add_consumer(self, consumer_module, consumer_port):
+        key = consumer_module, consumer_port
+        assert key not in self.consumers
+        self.consumers[key] = 0
+
+    def push(self, value):
+        self.buffer.append(value)
+        return len(self.buffer) < self.target_size
+
+    def close(self):
+        # TODO
+        pass
+
+
+class Task(object):
+    """A scheduled interpreter task, that will eventually be executed.
+    """
+    def __init__(self):
+        self.dependents = set()
+        self.dependencies = set()
+
+    def execute(self, interpreter):
+        raise NotImplementedError
+
+
+class StartTask(Task):
+    """Instanciate and start executing a module.
+    """
+    def __init__(self, module):
+        """
+        :type module: InstanciatedModule
+        """
+        Task.__init__(self)
+        self._module = module
+
+    def execute(self, interpreter):
+        self._module.start()
+
+
+class FinishTask(Task):
+    """Call finish() on a module.
+    """
+    def __init__(self, module, reason):
+        """
+        :type module: InstanciatedModule
+        """
+        Task.__init__(self)
+        self._module = module
+        self._reason = reason
+
+    def execute(self, interpreter):
+        self._module.finish(self._reason)
 
 
 class Interpreter(object):
     def execute_pipeline(self):
         import basic_modules as basic
 
+        # Make fake pipeline
+        # TODO: every port here is treated as depth=1 ports
         def connect(umod, uport, dmod, dport):
-            umod.down[uport] = dmod, dport
-            dmod.up[dport] = umod, uport
+            assert dport not in dmod.up
+            if uport not in umod.down:
+                stream = umod.down[uport] = Stream(umod, uport)
+            else:
+                stream = umod.down[uport]
+            stream.add_consumer(dmod, dport)
+            dmod.up[dport] = stream
 
-        a = InstanciatedModule(basic.Constant, {'value': '/etc/passwd'})
-        b = InstanciatedModule(basic.ReadFile)
+        a = InstanciatedModule(self, basic.Constant, {'value': '/etc/passwd'})
+        b = InstanciatedModule(self, basic.ReadFile)
         connect(a, 'value', b, 'path')
-        c = InstanciatedModule(basic.RandomNumbers)
-        d = InstanciatedModule(basic.ParitySplitter)
+        c = InstanciatedModule(self, basic.RandomNumbers)
+        d = InstanciatedModule(self, basic.ParitySplitter)
         connect(c, 'number', d, 'number')
-        e = InstanciatedModule(basic.Zip)
+        e = InstanciatedModule(self, basic.Zip)
         connect(b, 'line', e, 'left')
         connect(d, 'odd', e, 'right')
-        f = InstanciatedModule(basic.Sample, {'rate': 5})
+        f = InstanciatedModule(self, basic.Sample, {'rate': 5})
         connect(e, 'zip', f, 'data')
-        g = InstanciatedModule(basic.Sample, {'rate': 20})
+        g = InstanciatedModule(self, basic.Sample, {'rate': 20})
         connect(d, 'even', g, 'data')
-        h = InstanciatedModule(basic.AddPrevious)
+        h = InstanciatedModule(self, basic.AddPrevious)
         connect(g, 'sampled', h, 'number')
-        i = InstanciatedModule(basic.Count)
+        i = InstanciatedModule(self, basic.Count)
         connect(h, 'sum', i, 'data')
-        j = InstanciatedModule(basic.Format, {'format': "right branch ({0})"})
+        j = InstanciatedModule(self, basic.Format,
+                               {'format': "right branch ({0})"})
         connect(i, 'length', j, 'element')
-        k = InstanciatedModule(basic.Format, {'format': "sum: {0}"})
+        k = InstanciatedModule(self, basic.Format, {'format': "sum: {0}"})
         connect(h, 'sum', k, 'element')
-        l = InstanciatedModule(basic.StandardOutput)
+        l = InstanciatedModule(self, basic.StandardOutput)
         connect(k, 'string', l, 'data')
-        m = InstanciatedModule(basic.StandardOutput)
+        m = InstanciatedModule(self, basic.StandardOutput)
         connect(f, 'sampled', m, 'data')
         connect(j, 'string', m, 'data')
+
+        sinks = [m, l]
+
+        self.started_modules = set()
+        self.ready_tasks = [StartTask(mod) for mod in sinks]
+        self.dependent_tasks = set()
+
+        try:
+            while self.ready_tasks:
+                task = self.ready_tasks.pop(0)
+
+                task.execute(self)
+
+                for dep in task.dependents:
+                    dep.dependencies.remove(dep)
+                    if not dep.dependencies:
+                        self.ready_tasks.append(dep)
+
+            if self.dependent_tasks:
+                raise RuntimeError("There are still tasks but nothing can be "
+                                   "executed (deadlock)")
+
+            assert not self.started_modules
+        finally:
+            for module in self.started_modules:
+                module.finish(FinishReason.TERMINATE)
