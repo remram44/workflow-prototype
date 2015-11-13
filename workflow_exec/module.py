@@ -30,6 +30,14 @@ class Module(object):
         """
         raise KeyError("Unexpected input %r" % port)
 
+    def input_list(self, port, values):
+        """Handle a list of input on a port.
+
+        The default implementation just loops and calls `input()`.
+        """
+        for v in values:
+            self.input(port, v)
+
     def input_end(self, port):
         """Handle the end of the input on a port.
         """
@@ -85,7 +93,16 @@ class Module(object):
         it is also safe to ignore the return value, the only cost is greater
         memory usage and latency.
         """
-        return self._interface.module_produces_output(port, value)
+        return self._interface.module_produces_output(port, [value])
+
+    def _output_list(self, port, values):
+        """Output data on a port.
+
+        This sends multiple elements to the downstream modules at once.
+
+        This is more efficient than `_output()` in some conditions.
+        """
+        return self._interface.module_produces_output(port, values)
 
     def _finish(self):
         """Indicates that this module is done.

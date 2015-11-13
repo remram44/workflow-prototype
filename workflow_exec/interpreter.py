@@ -41,11 +41,11 @@ class InstanciatedModule(object):
         self._expected_input[port] = self._expected_input.get(port, 0) + nb
         # TODO: call input() sometime
 
-    def module_produces_output(self, port, value):
+    def module_produces_output(self, port, values):
         if port not in self.down:
             return True
         stream = self.down[port]
-        ret = stream.push(value)
+        ret = stream.push(values)
         if not ret:
             self._expect_to_output = True
             # TODO: call step() sometime
@@ -78,24 +78,36 @@ class Stream(object):
         self.producing = True
 
         # Maps (module, port) to reading position
-        self.consumers = {}
+        self.consumers = set()
         self.position = 0
 
         self.buffer = []
         self.target_size = 1
 
-    def add_consumer(self, consumer_module, consumer_port):
-        key = consumer_module, consumer_port
-        assert key not in self.consumers
-        self.consumers[key] = 0
+    def new_consumer(self, consumer_module, consumer_port):
+        endpoint = StreamOutput(self, consumer_module, consumer_port)
+        self.consumers.add(endpoint)
+        return endpoint
 
-    def push(self, value):
-        self.buffer.append(value)
+    def push(self, values):
+        self.buffer.extend(values)
         return len(self.buffer) < self.target_size
 
     def close(self):
         # TODO
         pass
+
+
+class StreamOutput(object):
+    """A downstream endpoint of a stream.
+
+    This keeps some information like the position in the stream.
+    """
+    def __init__(self, stream, consumer_module, consumer_port):
+        self.stream = stream
+        self.position = 0
+        self.consumer_module = consumer_module
+        self.consumer_port = consumer_port
 
 
 class Task(object):
@@ -150,8 +162,7 @@ class Interpreter(object):
                 stream = umod.down[uport] = Stream(umod, uport)
             else:
                 stream = umod.down[uport]
-            stream.add_consumer(dmod, dport)
-            dmod.up[dport] = stream
+            dmod.up[dport] = stream.new_consumer(dmod, dport)
 
         a = InstanciatedModule(self, basic.Constant, {'value': '/etc/passwd'})
         b = InstanciatedModule(self, basic.ReadFile)
@@ -179,9 +190,10 @@ class Interpreter(object):
         connect(k, 'string', l, 'data')
         m = InstanciatedModule(self, basic.StandardOutput)
         connect(f, 'sampled', m, 'data')
-        connect(j, 'string', m, 'data')
+        n = InstanciatedModule(self, basic.StandardOutput)
+        connect(j, 'string', n, 'data')
 
-        sinks = [m, l]
+        sinks = [m, n, l]
 
         self.started_modules = set()
         self.ready_tasks = [StartTask(mod) for mod in sinks]
@@ -204,5 +216,5 @@ class Interpreter(object):
 
             assert not self.started_modules
         finally:
-            for module in self.started_modules:
+            for module in list(self.started_modules):
                 module.finish(FinishReason.TERMINATE)

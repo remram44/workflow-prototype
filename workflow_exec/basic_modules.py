@@ -206,5 +206,3 @@ def ZipLongest(module, parameters):
             while True:
                 left = yield module.get_input('left')
                 yield module.output('zip', (left, None))
-
-print(ZipLongest)
