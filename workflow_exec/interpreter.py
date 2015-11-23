@@ -157,6 +157,11 @@ class Stream(object):
             self.buffer = self.buffer[pos - self.position:]
             self.position = pos
 
+        if self.waiting:
+            self.waiting = False
+            self.interpreter.ready_tasks.append(
+                OutputTask(self.producer_module))
+
     def __repr__(self):
         return "<stream %d>" % self.stream_id
 
@@ -183,6 +188,10 @@ class StreamOutput(object):
         if not self.requested:
             self.waiting = True
         self.requested = nb
+
+        if self.stream.producer_module._instance is None:
+            self.stream.interpreter.ready_tasks.append(
+                StartTask(self.stream.producer_module))
 
     def __repr__(self):
         return "<endpoint of stream %d: %r, port %r>" % (
@@ -232,6 +241,19 @@ class InputTask(Task):
         endpoint.position = stream.position + len(stream.buffer)
 
         stream.compact()
+
+
+class OutputTask(Task):
+    """Allow a module to produce more output by calling step().
+    """
+    def __init__(self, module):
+        """
+        :type module: InstanciatedModule
+        """
+        self._module = module
+
+    def execute(self):
+        self._module._instance.step()
 
 
 class FinishTask(Task):
@@ -313,7 +335,7 @@ class Interpreter(object):
                 raise RuntimeError("There are still tasks but nothing can be "
                                    "executed (deadlock)")
 
-            assert not self.started_modules
+            #assert not self.started_modules
         finally:
             for module in list(self.started_modules):
                 module.finish(FinishReason.TERMINATE)
