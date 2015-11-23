@@ -192,7 +192,7 @@ class StreamOutput(object):
 class Task(object):
     """A scheduled interpreter task, that will eventually be executed.
     """
-    def execute(self, interpreter):
+    def execute(self):
         raise NotImplementedError
 
 
@@ -206,7 +206,7 @@ class StartTask(Task):
         Task.__init__(self)
         self._module = module
 
-    def execute(self, interpreter):
+    def execute(self):
         self._module.start()
 
 
@@ -214,11 +214,14 @@ class InputTask(Task):
     """Feed more input to a module that requested it.
     """
     def __init__(self, stream_output):
+        """
+        :type stream_output: StreamOutput
+        """
         Task.__init__(self)
-        self.stream_output = stream_output
+        self._stream_output = stream_output
 
-    def execute(self, interpreter):
-        endpoint = self.stream_output
+    def execute(self):
+        endpoint = self._stream_output
         stream = endpoint.stream
         module = endpoint.consumer_module
         port = endpoint.consumer_port
@@ -242,7 +245,7 @@ class FinishTask(Task):
         self._module = module
         self._reason = reason
 
-    def execute(self, interpreter):
+    def execute(self):
         self._module.finish(self._reason)
 
 
@@ -299,7 +302,7 @@ class Interpreter(object):
             while self.ready_tasks:
                 task = self.ready_tasks.pop(0)
 
-                task.execute(self)
+                task.execute()
 
                 #for dep in task.dependents:
                 #    dep.dependencies.remove(dep)
