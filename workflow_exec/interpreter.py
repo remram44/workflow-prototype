@@ -39,7 +39,7 @@ class InstanciatedModule(object):
 
     def module_requests_input(self, port, nb):
         self._expected_input[port] = self._expected_input.get(port, 0) + nb
-        # TODO: call input() sometime
+        self.up[port].wait_input(nb)
 
     def module_produces_output(self, port, values):
         if port not in self.down:
@@ -48,8 +48,7 @@ class InstanciatedModule(object):
         ret = stream.push(values)
         if not ret:
             self._expect_to_output = True
-            # TODO: call step() sometime
-            pass
+            stream.wait_output()
         return ret
 
     def module_reports_finish(self):
@@ -70,9 +69,12 @@ class Stream(object):
     This is the connection between one producer and multiple consumers. It is
     essentially a buffer.
     """
-    def __init__(self, producer_module, producer_port):
+    def __init__(self, interpreter, producer_module, producer_port):
+        self.interpreter = interpreter
         self.producer_module = producer_module
         self.producer_port = producer_port
+
+        self.waiting = False
 
         # Whether this stream is still open; True until the producer finishes
         self.producing = True
@@ -91,11 +93,35 @@ class Stream(object):
 
     def push(self, values):
         self.buffer.extend(values)
+
+        for endpoint in self.consumers:
+            if endpoint.waiting:
+                self.interpreter.ready_tasks.append(InputTask(endpoint))
+
         return len(self.buffer) < self.target_size
 
     def close(self):
         # TODO
         pass
+
+    def wait_output(self):
+        self.waiting = True
+
+    def compact(self):
+        # FIXME: optimize
+        pos = None
+        for endpoint in self.consumers:
+            if pos is None:
+                pos = endpoint.position
+            else:
+                pos = min(endpoint.position, pos)
+        if pos is None:
+            # Discard
+            self.position += len(self.buffer)
+            self.buffer = []
+        else:
+            self.buffer = self.buffer[pos - self.position:]
+            self.position = pos
 
 
 class StreamOutput(object):
@@ -108,6 +134,18 @@ class StreamOutput(object):
         self.position = 0
         self.consumer_module = consumer_module
         self.consumer_port = consumer_port
+        self.requested = 0
+        self.waiting = False
+
+    def wait_input(self, nb):
+        # The consumer requests input
+        # If we have it, queue a task immediately; else mark the endpoint
+        available = self.stream.position + len(self.stream.buffer)
+        if available - self.position:
+            self.stream.interpreter.ready_tasks.append(InputTask(self))
+        if not self.requested:
+            self.waiting = True
+        self.requested = nb
 
 
 class Task(object):
@@ -135,6 +173,27 @@ class StartTask(Task):
         self._module.start()
 
 
+class InputTask(Task):
+    """Feed more input to a module that requested it.
+    """
+    def __init__(self, stream_output):
+        Task.__init__(self)
+        self.stream_output = stream_output
+
+    def execute(self, interpreter):
+        endpoint = self.stream_output
+        stream = endpoint.stream
+        module = endpoint.consumer_module
+        port = endpoint.consumer_port
+
+        module._instance.input_list(
+            port,
+            stream.buffer[endpoint.position - stream.position:])
+        endpoint.position = stream.position + len(stream.buffer)
+
+        stream.compact()
+
+
 class FinishTask(Task):
     """Call finish() on a module.
     """
@@ -159,7 +218,7 @@ class Interpreter(object):
         def connect(umod, uport, dmod, dport):
             assert dport not in dmod.up
             if uport not in umod.down:
-                stream = umod.down[uport] = Stream(umod, uport)
+                stream = umod.down[uport] = Stream(self, umod, uport)
             else:
                 stream = umod.down[uport]
             dmod.up[dport] = stream.new_consumer(dmod, dport)
