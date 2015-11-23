@@ -192,10 +192,6 @@ class StreamOutput(object):
 class Task(object):
     """A scheduled interpreter task, that will eventually be executed.
     """
-    def __init__(self):
-        self.dependents = set()
-        self.dependencies = set()
-
     def execute(self, interpreter):
         raise NotImplementedError
 
@@ -305,10 +301,10 @@ class Interpreter(object):
 
                 task.execute(self)
 
-                for dep in task.dependents:
-                    dep.dependencies.remove(dep)
-                    if not dep.dependencies:
-                        self.ready_tasks.append(dep)
+                #for dep in task.dependents:
+                #    dep.dependencies.remove(dep)
+                #    if not dep.dependencies:
+                #        self.ready_tasks.append(dep)
 
             if self.dependent_tasks:
                 raise RuntimeError("There are still tasks but nothing can be "
