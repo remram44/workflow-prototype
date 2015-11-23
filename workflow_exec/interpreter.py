@@ -31,6 +31,7 @@ class InstanciatedModule(object):
 
         self._expected_input = {}
         self._expect_to_output = False
+        self._finished = False
 
     def start(self):
         logger.debug("%r starting", self)
@@ -47,8 +48,8 @@ class InstanciatedModule(object):
         logger.debug("%r doesn't implement step()...", self)
 
         # If all upstream streams are done, do module_reports_finish()
-        for port, stream in self.up.iteritems():
-            if stream.producing:
+        for port, endpoint in self.up.iteritems():
+            if endpoint.stream.producing:
                 return
 
         logger.debug("no step() implementation and upstream streams are done, "
@@ -74,7 +75,7 @@ class InstanciatedModule(object):
         return ret
 
     def module_reports_finish(self):
-        logger.debug("%r is finished", self)
+        logger.debug("%r reports finish", self)
 
         for port, stream in self.down.iteritems():
             stream.close()
@@ -82,8 +83,14 @@ class InstanciatedModule(object):
             FinishTask(self, FinishReason.CALLED_FINISH))
 
     def finish(self, reason):
+        if self._finished:
+            return
+
+        logger.debug("%r finished", self)
+
         if reason != FinishReason.ALL_OUTPUT_DONE:
             self._interpreter.started_modules.remove(self)
+            self._finished = True
         self._instance.finish(reason)
 
     def __repr__(self):
@@ -216,7 +223,8 @@ class StartTask(Task):
         self._module = module
 
     def execute(self):
-        self._module.start()
+        if self._module._instance is None:
+            self._module.start()
 
 
 class InputTask(Task):
@@ -275,7 +283,8 @@ class Interpreter(object):
     def execute_pipeline(self):
         import basic_modules as basic
 
-        # Make fake pipeline
+        # ####################
+        # + FAKE PIPELINE
         # TODO: every port here is treated as depth=1 ports
         def connect(umod, uport, dmod, dport):
             assert dport not in dmod.up
@@ -288,33 +297,22 @@ class Interpreter(object):
         a = InstanciatedModule(self, basic.Constant, {'value': '/etc/passwd'})
         b = InstanciatedModule(self, basic.ReadFile)
         connect(a, 'value', b, 'path')
-        c = InstanciatedModule(self, basic.RandomNumbers)
-        d = InstanciatedModule(self, basic.ParitySplitter)
-        connect(c, 'number', d, 'number')
+        c = InstanciatedModule(self, basic.Count)
+        connect(b, 'line', c, 'data')
+        d = InstanciatedModule(self, basic.RandomNumbers)
         e = InstanciatedModule(self, basic.Zip)
         connect(b, 'line', e, 'left')
-        connect(d, 'odd', e, 'right')
-        f = InstanciatedModule(self, basic.Sample, {'rate': 5})
-        connect(e, 'zip', f, 'data')
-        g = InstanciatedModule(self, basic.Sample, {'rate': 20})
-        connect(d, 'even', g, 'data')
-        h = InstanciatedModule(self, basic.AddPrevious)
-        connect(g, 'sampled', h, 'number')
-        i = InstanciatedModule(self, basic.Count)
-        connect(h, 'sum', i, 'data')
-        j = InstanciatedModule(self, basic.Format,
-                               {'format': "right branch ({0})"})
-        connect(i, 'length', j, 'element')
-        k = InstanciatedModule(self, basic.Format, {'format': "sum: {0}"})
-        connect(h, 'sum', k, 'element')
-        l = InstanciatedModule(self, basic.StandardOutput)
-        connect(k, 'string', l, 'data')
-        m = InstanciatedModule(self, basic.StandardOutput)
-        connect(f, 'sampled', m, 'data')
-        n = InstanciatedModule(self, basic.StandardOutput)
-        connect(j, 'string', n, 'data')
+        connect(d, 'number', e, 'right')
 
-        sinks = [m, n, l]
+        f = InstanciatedModule(self, basic.StandardOutput)
+        connect(c, 'length', f, 'data')
+        g = InstanciatedModule(self, basic.StandardOutput)
+        connect(e, 'zip', g, 'data')
+
+        sinks = [f, g]
+        logger.debug("Fake pipeline created")
+        # - FAKE PIPELINE
+        # ####################
 
         self.started_modules = set()
         self.ready_tasks = [StartTask(mod) for mod in sinks]
@@ -322,6 +320,9 @@ class Interpreter(object):
 
         try:
             while self.ready_tasks:
+                logger.debug("Tasks: %s", ', '.join(type(t).__name__
+                                                    for t in self.ready_tasks))
+
                 task = self.ready_tasks.pop(0)
 
                 task.execute()
