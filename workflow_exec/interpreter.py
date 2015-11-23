@@ -1,4 +1,10 @@
+import itertools
+from logging import getLogger
+
 from workflow_exec.module import FinishReason
+
+
+logger = getLogger('interpreter')
 
 
 class InstanciatedModule(object):
@@ -6,7 +12,13 @@ class InstanciatedModule(object):
 
     This wraps the Module object defined by users.
     """
+    _id_gen = itertools.count()
+
     def __init__(self, interpreter, class_, parameters=None):
+        self.instance_id = next(self._id_gen)
+
+        logger.debug("%r created, class=%r", self, class_)
+
         self._interpreter = interpreter
         if parameters is None:
             self._parameters = {}
@@ -21,6 +33,8 @@ class InstanciatedModule(object):
         self._expect_to_output = False
 
     def start(self):
+        logger.debug("%r starting", self)
+
         self._instance = self._class(self._parameters, self)
         self._instance.start()
         self._interpreter.started_modules.add(self)
@@ -30,18 +44,26 @@ class InstanciatedModule(object):
                                "finished (after start())")
 
     def module_step_unimplemented(self):
+        logger.debug("%r doesn't implement step()...", self)
+
         # If all upstream streams are done, do module_reports_finish()
         for port, stream in self.up.iteritems():
             if stream.producing:
                 return
 
+        logger.debug("no step() implementation and upstream streams are done, "
+                     "calling finish()")
         self.module_reports_finish()
 
     def module_requests_input(self, port, nb):
+        logger.debug("%r requests input on port %r (%d)", self, port, nb)
+
         self._expected_input[port] = self._expected_input.get(port, 0) + nb
         self.up[port].wait_input(nb)
 
     def module_produces_output(self, port, values):
+        logger.debug("%r produced output on port %r: %r", self, port, values)
+
         if port not in self.down:
             return True
         stream = self.down[port]
@@ -52,6 +74,8 @@ class InstanciatedModule(object):
         return ret
 
     def module_reports_finish(self):
+        logger.debug("%r is finished", self)
+
         for port, stream in self.down.iteritems():
             stream.close()
         self._interpreter.ready_tasks.append(
@@ -62,6 +86,9 @@ class InstanciatedModule(object):
             self._interpreter.started_modules.remove(self)
         self._instance.finish(reason)
 
+    def __repr__(self):
+        return "<instance %d>" % self.instance_id
+
 
 class Stream(object):
     """A stream between two ports.
@@ -69,7 +96,13 @@ class Stream(object):
     This is the connection between one producer and multiple consumers. It is
     essentially a buffer.
     """
+    _id_gen = itertools.count()
+
     def __init__(self, interpreter, producer_module, producer_port):
+        self.stream_id = next(self._id_gen)
+
+        logger.debug("%r created", self)
+
         self.interpreter = interpreter
         self.producer_module = producer_module
         self.producer_port = producer_port
@@ -88,6 +121,7 @@ class Stream(object):
 
     def new_consumer(self, consumer_module, consumer_port):
         endpoint = StreamOutput(self, consumer_module, consumer_port)
+        logger.debug("%r: new consumer: %r", self, endpoint)
         self.consumers.add(endpoint)
         return endpoint
 
@@ -123,6 +157,9 @@ class Stream(object):
             self.buffer = self.buffer[pos - self.position:]
             self.position = pos
 
+    def __repr__(self):
+        return "<stream %d>" % self.stream_id
+
 
 class StreamOutput(object):
     """A downstream endpoint of a stream.
@@ -146,6 +183,10 @@ class StreamOutput(object):
         if not self.requested:
             self.waiting = True
         self.requested = nb
+
+    def __repr__(self):
+        return "<endpoint of stream %d: %r, port %r>" % (
+            self.stream.stream_id, self.consumer_module, self.consumer_port)
 
 
 class Task(object):
