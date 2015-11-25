@@ -233,3 +233,14 @@ def ZipLongest(module, parameters):
             while True:
                 left = yield module.get_input('left')
                 yield module.output('zip', (left, None))
+
+
+from workflow_exec.vistrails_module.v2 import Module as OldModule
+
+
+class Add(OldModule):
+    def compute(self):
+        a = self.get_input('a')
+        b = self.get_output('b')
+        result = a + b
+        self.set_output('result', result)
