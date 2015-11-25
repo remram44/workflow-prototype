@@ -7,7 +7,7 @@ from workflow_exec.module import FinishReason
 logger = getLogger('interpreter')
 
 
-class InstanciatedModule(object):
+class InstantiatedModule(object):
     """A module in the workflow, that consumes inputs and produces outputs.
 
     This wraps the Module object defined by users.
@@ -202,7 +202,7 @@ class StreamOutput(object):
         self.requested = True
 
         if self.stream.producer_module._instance is None:
-            logger.debug("%r not yet instanciated, adding StartTask",
+            logger.debug("%r not yet instantiated, adding StartTask",
                          self.stream.producer_module)
             self.stream.interpreter.ready_tasks.append(
                 StartTask(self.stream.producer_module))
@@ -220,11 +220,11 @@ class Task(object):
 
 
 class StartTask(Task):
-    """Instanciate and start executing a module.
+    """Instantiate and start executing a module.
     """
     def __init__(self, module):
         """
-        :type module: InstanciatedModule
+        :type module: InstantiatedModule
         """
         Task.__init__(self)
         self._module = module
@@ -276,7 +276,7 @@ class OutputTask(Task):
     """
     def __init__(self, module):
         """
-        :type module: InstanciatedModule
+        :type module: InstantiatedModule
         """
         self._module = module
 
@@ -292,7 +292,7 @@ class FinishTask(Task):
     """
     def __init__(self, module, reason):
         """
-        :type module: InstanciatedModule
+        :type module: InstantiatedModule
         """
         Task.__init__(self)
         self._module = module
@@ -320,19 +320,19 @@ class Interpreter(object):
                 stream = umod.down[uport]
             dmod.up[dport] = stream.new_consumer(dmod, dport)
 
-        a = InstanciatedModule(self, basic.Constant, {'value': '/etc/passwd'})
-        b = InstanciatedModule(self, basic.ReadFile)
+        a = InstantiatedModule(self, basic.Constant, {'value': '/etc/passwd'})
+        b = InstantiatedModule(self, basic.ReadFile)
         connect(a, 'value', b, 'path')
-        c = InstanciatedModule(self, basic.Count)
+        c = InstantiatedModule(self, basic.Count)
         connect(b, 'line', c, 'data')
-        d = InstanciatedModule(self, basic.RandomNumbers)
-        e = InstanciatedModule(self, basic.Zip)
+        d = InstantiatedModule(self, basic.RandomNumbers)
+        e = InstantiatedModule(self, basic.Zip)
         connect(b, 'line', e, 'left')
         connect(d, 'number', e, 'right')
 
-        f = InstanciatedModule(self, basic.StandardOutput)
+        f = InstantiatedModule(self, basic.StandardOutput)
         connect(c, 'length', f, 'data')
-        g = InstanciatedModule(self, basic.StandardOutput)
+        g = InstantiatedModule(self, basic.StandardOutput)
         connect(e, 'zip', g, 'data')
 
         sinks = [f, g]
