@@ -202,6 +202,8 @@ class StreamOutput(object):
         self.requested = True
 
         if self.stream.producer_module._instance is None:
+            logger.debug("%r not yet instanciated, adding StartTask",
+                         self.stream.producer_module)
             self.stream.interpreter.ready_tasks.append(
                 StartTask(self.stream.producer_module))
 
@@ -230,6 +232,9 @@ class StartTask(Task):
     def execute(self):
         if self._module._instance is None:
             self._module.start()
+
+    def __repr__(self):
+        return "StartTask(module=%r)" % self._module
 
 
 class InputTask(Task):
@@ -262,6 +267,9 @@ class InputTask(Task):
 
         stream.compact()
 
+    def __repr__(self):
+        return "InputTask(endpoint=%r)" % self._stream_output
+
 
 class OutputTask(Task):
     """Allow a module to produce more output by calling step().
@@ -274,6 +282,9 @@ class OutputTask(Task):
 
     def execute(self):
         self._module._instance.step()
+
+    def __repr__(self):
+        return "OutputTask(module=%r)" % self._module
 
 
 class FinishTask(Task):
@@ -289,6 +300,9 @@ class FinishTask(Task):
 
     def execute(self):
         self._module.finish(self._reason)
+
+    def __repr__(self):
+        return "StartTask(module=%r, %r)" % (self._module, self._reason)
 
 
 class Interpreter(object):
@@ -332,8 +346,9 @@ class Interpreter(object):
 
         try:
             while self.ready_tasks:
-                logger.debug("Tasks: %s", ', '.join(type(t).__name__
-                                                    for t in self.ready_tasks))
+                logger.debug("========================================")
+                logger.debug("Tasks:\n%s",
+                             '\n'.join("    %r" % t for t in self.ready_tasks))
 
                 task = self.ready_tasks.pop(0)
 
