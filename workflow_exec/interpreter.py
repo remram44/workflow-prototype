@@ -56,11 +56,16 @@ class InstanciatedModule(object):
                      "calling finish()")
         self.module_reports_finish()
 
-    def module_requests_input(self, port, nb):
-        logger.debug("%r requests input on port %r (%d)", self, port, nb)
+    def module_requests_input(self, port, all_available):
+        if all_available:
+            logger.debug("%r requests all available input on port %r",
+                         self, port)
+        else:
+            logger.debug("%r requests input on port %r",
+                         self, port)
 
-        self._expected_input[port] = self._expected_input.get(port, 0) + nb
-        self.up[port].wait_input(nb)
+        self._expected_input[port] = all_available
+        self.up[port].wait_input()
 
     def module_produces_output(self, port, values):
         logger.debug("%r produced output on port %r: %r", self, port, values)
@@ -186,7 +191,7 @@ class StreamOutput(object):
         self.requested = 0
         self.waiting = False
 
-    def wait_input(self, nb):
+    def wait_input(self):
         # The consumer requests input
         # If we have it, queue a task immediately; else mark the endpoint
         available = self.stream.position + len(self.stream.buffer)
@@ -194,7 +199,7 @@ class StreamOutput(object):
             self.stream.interpreter.ready_tasks.append(InputTask(self))
         if not self.requested:
             self.waiting = True
-        self.requested = nb
+        self.requested = True
 
         if self.stream.producer_module._instance is None:
             self.stream.interpreter.ready_tasks.append(
@@ -243,10 +248,17 @@ class InputTask(Task):
         module = endpoint.consumer_module
         port = endpoint.consumer_port
 
-        module._instance.input_list(
-            port,
-            stream.buffer[endpoint.position - stream.position:])
-        endpoint.position = stream.position + len(stream.buffer)
+        all_available = module._expected_input[port]
+        if all_available:
+            module._instance.input_list(
+                port,
+                stream.buffer[endpoint.position - stream.position:])
+            endpoint.position = stream.position + len(stream.buffer)
+        else:
+            module._instance.input_list(
+                port,
+                [stream.buffer[endpoint.position - stream.position]])
+            endpoint.position += 1
 
         stream.compact()
 

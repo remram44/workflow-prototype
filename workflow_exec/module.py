@@ -72,15 +72,19 @@ class Module(object):
         * `CALLED_FINISH`: you called `_finish()`.
         """
 
-    def _request_input(self, port, nb=1):
+    def _request_input(self, port, all_available=False):
         """Ask for input on a port.
 
         This indicates that the module expects data on the given port next.
         `input()` (or `input_end()`) will be called when it is available.
 
         Don't forget to call this!
+
+        If all_available is set, the module will get all the input currently
+        available at once instead of buffering up until the next
+        `_request_input()` call.
         """
-        self._interface.module_requests_input(port, nb)
+        self._interface.module_requests_input(port, all_available)
 
     def _output(self, port, value):
         """Output data on a port.
