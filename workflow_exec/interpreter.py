@@ -262,7 +262,7 @@ class InputTask(Task):
         module = endpoint.consumer_module
         port = endpoint.consumer_port
 
-        all_available = module._expected_input[port]
+        all_available = module._expected_input.pop(port)
         logger.debug("endpoint: %d, stream: %d-%d",
                      endpoint.position,
                      stream.position, stream.position + len(stream.buffer))
@@ -273,17 +273,20 @@ class InputTask(Task):
                          stream.position + len(buffer) - endpoint.position,
                          endpoint.position,
                          stream.position + len(stream.buffer))
+            feed = stream.buffer[endpoint.position - stream.position:]
+            endpoint.position = stream.position + len(stream.buffer)
             module._instance.input_list(
                 port,
-                stream.buffer[endpoint.position - stream.position:])
-            endpoint.position = stream.position + len(stream.buffer)
+                feed)
         else:
             logger.debug("Feeding one input to %r, port %r: %d",
                          module, port, endpoint.position)
+            feed = [stream.buffer[endpoint.position - stream.position]]
+            endpoint.position += 1
             module._instance.input_list(
                 port,
-                [stream.buffer[endpoint.position - stream.position]])
-            endpoint.position += 1
+                feed)
+        endpoint.waiting = False
 
         stream.compact()
 
