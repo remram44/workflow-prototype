@@ -161,6 +161,7 @@ class Stream(object):
                 pos = endpoint.position
             else:
                 pos = min(endpoint.position, pos)
+        old_pos, old_len = self.position, len(self.buffer)
         if pos is None:
             # Discard
             self.position += len(self.buffer)
@@ -168,6 +169,9 @@ class Stream(object):
         else:
             self.buffer = self.buffer[pos - self.position:]
             self.position = pos
+
+        logger.debug("Compacted stream %r: %d:%d -> %d:%d",
+                     self, old_pos, old_len, self.position, len(self.buffer))
 
         if self.waiting:
             self.waiting = False
@@ -195,7 +199,12 @@ class StreamOutput(object):
         # The consumer requests input
         # If we have it, queue a task immediately; else mark the endpoint
         available = self.stream.position + len(self.stream.buffer)
-        if available - self.position:
+        logger.debug("requested input is %s; "
+                     "endpoint: %r, stream: %d-%d",
+                     "available" if available - self.position > 0
+                     else "not available",
+                     self.position, self.stream.position, available)
+        if available - self.position > 0:
             self.stream.interpreter.ready_tasks.append(InputTask(self))
         if not self.requested:
             self.waiting = True
@@ -254,12 +263,23 @@ class InputTask(Task):
         port = endpoint.consumer_port
 
         all_available = module._expected_input[port]
+        logger.debug("endpoint: %d, stream: %d-%d",
+                     endpoint.position,
+                     stream.position, stream.position + len(stream.buffer))
         if all_available:
+            logger.debug("Feeding all input to %r, port %r: "
+                         "%d elements, %d-%d",
+                         module, port,
+                         stream.position + len(buffer) - endpoint.position,
+                         endpoint.position,
+                         stream.position + len(stream.buffer))
             module._instance.input_list(
                 port,
                 stream.buffer[endpoint.position - stream.position:])
             endpoint.position = stream.position + len(stream.buffer)
         else:
+            logger.debug("Feeding one input to %r, port %r: %d",
+                         module, port, endpoint.position)
             module._instance.input_list(
                 port,
                 [stream.buffer[endpoint.position - stream.position]])
@@ -302,7 +322,7 @@ class FinishTask(Task):
         self._module.finish(self._reason)
 
     def __repr__(self):
-        return "StartTask(module=%r, %r)" % (self._module, self._reason)
+        return "FinishTask(module=%r, %r)" % (self._module, self._reason)
 
 
 class Interpreter(object):
@@ -320,22 +340,22 @@ class Interpreter(object):
                 stream = umod.down[uport]
             dmod.up[dport] = stream.new_consumer(dmod, dport)
 
-        a = InstantiatedModule(self, basic.Constant, {'value': '/etc/passwd'})
-        b = InstantiatedModule(self, basic.ReadFile)
-        connect(a, 'value', b, 'path')
-        c = InstantiatedModule(self, basic.Count)
-        connect(b, 'line', c, 'data')
-        d = InstantiatedModule(self, basic.RandomNumbers)
-        e = InstantiatedModule(self, basic.Zip)
-        connect(b, 'line', e, 'left')
-        connect(d, 'number', e, 'right')
+        m0 = InstantiatedModule(self, basic.Constant, {'value': '/etc/passwd'})
+        m1 = InstantiatedModule(self, basic.ReadFile)
+        connect(m0, 'value', m1, 'path')
+        m2 = InstantiatedModule(self, basic.Count)
+        connect(m1, 'line', m2, 'data')
+        m3 = InstantiatedModule(self, basic.RandomNumbers)
+        m4 = InstantiatedModule(self, basic.Zip)
+        connect(m1, 'line', m4, 'left')
+        connect(m3, 'number', m4, 'right')
 
-        f = InstantiatedModule(self, basic.StandardOutput)
-        connect(c, 'length', f, 'data')
-        g = InstantiatedModule(self, basic.StandardOutput)
-        connect(e, 'zip', g, 'data')
+        m5 = InstantiatedModule(self, basic.StandardOutput)
+        connect(m2, 'length', m5, 'data')
+        m6 = InstantiatedModule(self, basic.StandardOutput)
+        connect(m4, 'zip', m6, 'data')
 
-        sinks = [f, g]
+        sinks = [m5, m6]
         logger.debug("Fake pipeline created")
         # - FAKE PIPELINE
         # ####################
