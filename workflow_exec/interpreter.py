@@ -142,6 +142,7 @@ class Stream(object):
 
         for endpoint in self.consumers:
             if endpoint.waiting:
+                endpoint.waiting = False
                 self.interpreter.ready_tasks.append(InputTask(endpoint))
 
         return len(self.buffer) < self.target_size
@@ -151,6 +152,8 @@ class Stream(object):
         pass
 
     def wait_output(self):
+        if not self.waiting:
+            logger.debug("%r.waiting = True", self)
         self.waiting = True
 
     def compact(self):
@@ -170,13 +173,14 @@ class Stream(object):
             self.buffer = self.buffer[pos - self.position:]
             self.position = pos
 
-        logger.debug("Compacted stream %r: %d:%d -> %d:%d",
+        logger.debug("Compacted %r: %d:%d -> %d:%d",
                      self, old_pos, old_len, self.position, len(self.buffer))
 
         if self.waiting:
             self.waiting = False
             self.interpreter.ready_tasks.append(
                 OutputTask(self.producer_module))
+            logger.debug("%r.waiting = False & adding OutputTask", self)
 
     def __repr__(self):
         return "<stream %d>" % self.stream_id
@@ -192,7 +196,7 @@ class StreamOutput(object):
         self.position = 0
         self.consumer_module = consumer_module
         self.consumer_port = consumer_port
-        self.requested = 0
+        self.requested = False
         self.waiting = False
 
     def wait_input(self):
@@ -207,6 +211,7 @@ class StreamOutput(object):
         if available - self.position > 0:
             self.stream.interpreter.ready_tasks.append(InputTask(self))
         if not self.requested:
+            logger.debug("%r.waiting = True", self)
             self.waiting = True
         self.requested = True
 
@@ -262,6 +267,9 @@ class InputTask(Task):
         module = endpoint.consumer_module
         port = endpoint.consumer_port
 
+        logger.debug("%r.waiting = False", self)
+        endpoint.waiting = False
+        endpoint.requested = False
         all_available = module._expected_input.pop(port)
         logger.debug("endpoint: %d, stream: %d-%d",
                      endpoint.position,
@@ -286,7 +294,6 @@ class InputTask(Task):
             module._instance.input_list(
                 port,
                 feed)
-        endpoint.waiting = False
 
         stream.compact()
 
