@@ -84,7 +84,7 @@ class InstantiatedModule(object):
 
         for port, stream in self.down.iteritems():
             stream.close()
-        self._interpreter.ready_tasks.append(
+        self._interpreter.task_queue.append(
             FinishTask(self, FinishReason.CALLED_FINISH))
 
     def finish(self, reason):
@@ -143,7 +143,7 @@ class Stream(object):
         for endpoint in self.consumers:
             if endpoint.waiting:
                 endpoint.waiting = False
-                self.interpreter.ready_tasks.append(InputTask(endpoint))
+                self.interpreter.task_queue.append(InputTask(endpoint))
 
         return len(self.buffer) < self.target_size
 
@@ -178,7 +178,7 @@ class Stream(object):
 
         if self.waiting:
             self.waiting = False
-            self.interpreter.ready_tasks.append(
+            self.interpreter.task_queue.append(
                 OutputTask(self.producer_module))
             logger.debug("%r.waiting = False & adding OutputTask", self)
 
@@ -209,7 +209,7 @@ class StreamOutput(object):
                      else "not available",
                      self.position, self.stream.position, available)
         if available - self.position > 0:
-            self.stream.interpreter.ready_tasks.append(InputTask(self))
+            self.stream.interpreter.task_queue.append(InputTask(self))
         if not self.requested:
             logger.debug("%r.waiting = True", self)
             self.waiting = True
@@ -218,7 +218,7 @@ class StreamOutput(object):
         if self.stream.producer_module._instance is None:
             logger.debug("%r not yet instantiated, adding StartTask",
                          self.stream.producer_module)
-            self.stream.interpreter.ready_tasks.append(
+            self.stream.interpreter.task_queue.append(
                 StartTask(self.stream.producer_module))
 
     def __repr__(self):
@@ -371,27 +371,17 @@ class Interpreter(object):
         # ####################
 
         self.started_modules = set()
-        self.ready_tasks = [StartTask(mod) for mod in sinks]
-        self.dependent_tasks = set()
+        self.task_queue = [StartTask(mod) for mod in sinks]
 
         try:
-            while self.ready_tasks:
+            while self.task_queue:
                 logger.debug("========================================")
                 logger.debug("Tasks:\n%s",
-                             '\n'.join("    %r" % t for t in self.ready_tasks))
+                             '\n'.join("    %r" % t for t in self.task_queue))
 
-                task = self.ready_tasks.pop(0)
+                task = self.task_queue.pop(0)
 
                 task.execute()
-
-                #for dep in task.dependents:
-                #    dep.dependencies.remove(dep)
-                #    if not dep.dependencies:
-                #        self.ready_tasks.append(dep)
-
-            if self.dependent_tasks:
-                raise RuntimeError("There are still tasks but nothing can be "
-                                   "executed (deadlock)")
 
             #assert not self.started_modules
         finally:
