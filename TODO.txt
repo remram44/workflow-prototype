@@ -1,0 +1,21 @@
+handle end of execution
+    call finish() on modules
+    handle closing streams
+
+handle errors
+    wrap calls on Module instance through InstanciatedModule
+    notify interpreter of error and finish modules
+
+handle depth=0 connections
+
+make sure this plays nice with numpy
+    it should be possible to pass numpy arrays around without ever converting to list
+
+automatic looping
+
+streams of streams (depth>1)
+
+InputTask should reference specific slice of input data
+    currently a module that can accept multiple elements at once will consume all the stream at once
+    instead, create multiple InputTasks and each time consume the corresponding part of the stream?
+    -> data parallelism
