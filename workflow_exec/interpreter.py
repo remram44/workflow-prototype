@@ -350,7 +350,8 @@ class Interpreter(object):
                 stream = umod.down[uport]
             dmod.up[dport] = stream.new_consumer(dmod, dport)
 
-        m0 = InstantiatedModule(self, basic.Constant, {'value': '/etc/passwd'})
+        m0 = InstantiatedModule(self, basic.Constant,
+                                {'value': '/etc/resolv.conf'})
         m1 = InstantiatedModule(self, basic.ReadFile)
         connect(m0, 'value', m1, 'path')
         m2 = InstantiatedModule(self, basic.Count)
