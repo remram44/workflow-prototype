@@ -91,12 +91,25 @@ class InstantiatedModule(object):
         if self._finished:
             return
 
-        logger.debug("%r finished", self)
+        logger.debug("%r finished, reason=%s", self, reason)
 
         if reason != FinishReason.ALL_OUTPUT_DONE:
+            logger.debug("%r removed", self)
             self._interpreter.started_modules.remove(self)
             self._finished = True
         self._instance.finish(reason)
+
+    def stream_end(self, port):
+        logger.debug("stream finished: %r, port %r", self, port)
+        self._instance.input_end(port)
+
+        # If all upstream streams are done, do finish(ALL_OUTPUT_DONE)
+        for port, endpoint in self.up.iteritems():
+            if endpoint.stream.producing:
+                return
+
+        logger.debug("all input done")
+        self._instance.all_input_end()
 
     def __repr__(self):
         return "<instance %d>" % self.instance_id
@@ -148,8 +161,10 @@ class Stream(object):
         return len(self.buffer) < self.target_size
 
     def close(self):
-        # TODO
-        pass
+        logger.debug("Closing %r", self)
+        self.producing = False
+        for endpoint in self.consumers:
+            endpoint.consumer_module.stream_end(endpoint.consumer_port)
 
     def wait_output(self):
         if not self.waiting:
@@ -379,6 +394,9 @@ class Interpreter(object):
                 logger.debug("========================================")
                 logger.debug("Tasks:\n%s",
                              '\n'.join("    %r" % t for t in self.task_queue))
+                logger.debug("Started modules: %s",
+                             ' '.join('%d' % m.instance_id
+                                      for m in self.started_modules))
 
                 task = self.task_queue.pop(0)
 
@@ -386,5 +404,8 @@ class Interpreter(object):
 
             #assert not self.started_modules
         finally:
+            logger.debug("Execution done, killing remaining modules: %s",
+                         ' '.join('%d' % m.instance_id
+                                  for m in self.started_modules))
             for module in list(self.started_modules):
                 module.finish(FinishReason.TERMINATE)
