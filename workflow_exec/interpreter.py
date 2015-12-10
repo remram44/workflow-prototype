@@ -230,7 +230,7 @@ class StreamOutput(object):
             self.waiting = True
         self.requested = True
 
-        if self.stream.producer_module._instance is None:
+        if self.stream.producer_module._instance is None:  # no
             logger.debug("%r not yet instantiated, adding StartTask",
                          self.stream.producer_module)
             self.stream.interpreter.task_queue.append(
@@ -259,7 +259,7 @@ class StartTask(Task):
         self._module = module
 
     def execute(self):
-        if self._module._instance is None:
+        if self._module._instance is None:  # no
             self._module.start()
 
     def __repr__(self):
@@ -298,7 +298,7 @@ class InputTask(Task):
                          stream.position + len(stream.buffer))
             feed = stream.buffer[endpoint.position - stream.position:]
             endpoint.position = stream.position + len(stream.buffer)
-            module._instance.input_list(
+            module._instance.input_list(  # no
                 port,
                 feed)
         else:
@@ -306,7 +306,7 @@ class InputTask(Task):
                          module, port, endpoint.position)
             feed = [stream.buffer[endpoint.position - stream.position]]
             endpoint.position += 1
-            module._instance.input_list(
+            module._instance.input_list(  # no
                 port,
                 feed)
 
@@ -326,7 +326,7 @@ class OutputTask(Task):
         self._module = module
 
     def execute(self):
-        self._module._instance.step()
+        self._module._instance.step()  # no
 
     def __repr__(self):
         return "OutputTask(module=%r)" % self._module
