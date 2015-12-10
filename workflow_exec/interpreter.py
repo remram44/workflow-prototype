@@ -99,8 +99,8 @@ class InstantiatedModule(object):
             self._finished = True
         self._instance.finish(reason)
 
-    def stream_end(self, port):
-        logger.debug("stream finished: %r, port %r", self, port)
+    def upstream_end(self, port):
+        logger.debug("stream finished: %r, input port %r", self, port)
         self._instance.input_end(port)
 
         # If all upstream streams are done, do finish(ALL_OUTPUT_DONE)
@@ -164,7 +164,7 @@ class Stream(object):
         logger.debug("Closing %r", self)
         self.producing = False
         for endpoint in self.consumers:
-            endpoint.consumer_module.stream_end(endpoint.consumer_port)
+            endpoint.consumer_module.upstream_end(endpoint.consumer_port)
 
     def wait_output(self):
         if not self.waiting:
