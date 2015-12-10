@@ -1,4 +1,4 @@
-from workflow_exec.module import Module
+from workflow_exec.module import FinishReason, Module
 
 
 class Constant(Module):
@@ -25,6 +25,7 @@ class Count(Module):
 
     def all_input_end(self):
         self._output('length', self.counter)
+        self._finish()
 
 
 class Zip(Module):
@@ -101,6 +102,10 @@ class RandomNumbers(Module):
         while self._output('number', self._generator.randint(0, 255)):
             pass
 
+    def finish(self, reason):
+        if reason == FinishReason.ALL_OUTPUT_DONE:
+            self._finish()
+
 
 class Sample(Module):
     """Lets one element through every N elements (configured with parameter).
@@ -121,6 +126,9 @@ class Sample(Module):
         else:
             super(Sample, self).input(port, value)
 
+    def all_input_end(self):
+        self._finish()
+
 
 class StandardOutput(Module):
     """Outputs input values to stdout.
@@ -134,6 +142,9 @@ class StandardOutput(Module):
             self._request_input('data')
         else:
             super(StandardOutput, self).input(port, value)
+
+    def all_input_end(self):
+        self._finish()
 
 
 class ParitySplitter(Module):
@@ -152,6 +163,9 @@ class ParitySplitter(Module):
         else:
             super(ParitySplitter, self).input(port, value)
 
+    def all_input_end(self):
+        self._finish()
+
 
 class AddPrevious(Module):
     """Maps an element to the sum of all elements up to it.
@@ -167,6 +181,9 @@ class AddPrevious(Module):
             self._request_input('number')
         else:
             super(AddPrevious, self).input(port, value)
+
+    def all_input_end(self):
+        self._finish()
 
 
 class Format(Module):
@@ -186,6 +203,7 @@ class Format(Module):
 
     def input_end(self, port):
         self._output('string', self._format.format(*self._args))
+        self._finish()
 
 
 from workflow_exec.inline_module import inline_module, EndOfInput
