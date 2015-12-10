@@ -80,10 +80,19 @@ class InstantiatedModule(object):
         return ret
 
     def module_reports_finish(self):
+        if self._finished:
+            return
+
         logger.debug("%r reports finish", self)
 
+        # Close down streams
         for port, stream in self.down.iteritems():
             stream.close()
+
+        # Close up streams
+        for port, endpoint in self.up.iteritems():
+            endpoint.close()
+
         self._interpreter.task_queue.append(
             FinishTask(self, FinishReason.CALLED_FINISH))
 
@@ -110,6 +119,14 @@ class InstantiatedModule(object):
 
         logger.debug("all input done")
         self._instance.all_input_end()
+
+    def downstream_end(self, port):
+        logger.debug("stream finished: %r, output port %r", self, port)
+        if all(not stream.consumers for port, stream in self.down.iteritems()):
+            logger.debug("every down stream is finished, delivering "
+                         "ALL_OUTPUT_DONE")
+            self._interpreter.task_queue.append(
+                FinishTask(self, FinishReason.ALL_OUTPUT_DONE))
 
     def __repr__(self):
         return "<instance %d>" % self.instance_id
@@ -151,6 +168,9 @@ class Stream(object):
         return endpoint
 
     def push(self, values):
+        if not self.consumers:
+            return
+
         self.buffer.extend(values)
 
         for endpoint in self.consumers:
@@ -163,8 +183,13 @@ class Stream(object):
     def close(self):
         logger.debug("Closing %r", self)
         self.producing = False
-        for endpoint in self.consumers:
+        for endpoint in list(self.consumers):
             endpoint.consumer_module.upstream_end(endpoint.consumer_port)
+
+    def remove_consumer(self, endpoint):
+        self.consumers.remove(endpoint)
+        if not self.consumers:
+            self.producer_module.downstream_end(self.producer_port)
 
     def wait_output(self):
         if not self.waiting:
@@ -235,6 +260,10 @@ class StreamOutput(object):
                          self.stream.producer_module)
             self.stream.interpreter.task_queue.append(
                 StartTask(self.stream.producer_module))
+
+    def close(self):
+        logger.debug("Closing %r", self)
+        self.stream.remove_consumer(self)
 
     def __repr__(self):
         return "<endpoint of stream %d: %r, port %r>" % (
@@ -402,7 +431,7 @@ class Interpreter(object):
 
                 task.execute()
 
-            #assert not self.started_modules
+            assert not self.started_modules
         finally:
             logger.debug("Execution done, killing remaining modules: %s",
                          ' '.join('%d' % m.instance_id
