@@ -31,6 +31,7 @@ class InstantiatedModule(object):
         self._class = class_
         self._instance = None
 
+        self._inputs_producing = set()
         # The input this module has already requested, that we should deliver
         # it as soon as it is available. Tasks have already been created for
         # these
@@ -45,6 +46,19 @@ class InstantiatedModule(object):
         if self._instance is None:
             logger.debug("Adding StartTask for %r", self)
             self._interpreter.task_queue.append(StartTask(self))
+
+    def get_output_port(self, port):
+        if port not in self.down:
+            stream = self.down[port] = Stream(self._interpreter, self, port)
+        else:
+            stream = self.down[port]
+        return stream
+
+    def set_input_port(self, port, stream):
+        assert port not in self.up
+        self.up[port] = stream.new_consumer(self, port)
+        if stream.producing:
+            self._inputs_producing.add(port)
 
     @contextlib.contextmanager
     def _call_guard(self, description=None):
@@ -119,6 +133,8 @@ class InstantiatedModule(object):
         self.module_reports_finish()
 
     def module_requests_input(self, port, all_available):
+        if port not in self._inputs_producing:
+            return
         if all_available:
             logger.debug("%r requests all available input on port %r",
                          self, port)
@@ -160,14 +176,13 @@ class InstantiatedModule(object):
 
     def upstream_end(self, port):
         logger.debug("stream finished: %r, input port %r", self, port)
+        self._inputs_producing.remove(port)
+        self._expected_input.pop(port, None)
         with self._call_guard("calling input_end"):
             self._instance.input_end(port)
 
         # If all upstream streams are done, do finish(ALL_OUTPUT_DONE)
-        if self._finished:
-            return
-        for port, endpoint in self.up.iteritems():
-            if endpoint.stream.producing:
+        if self._finished or self._inputs_producing:
                 return
 
         logger.debug("all input done")
@@ -436,12 +451,8 @@ class Interpreter(object):
         # + FAKE PIPELINE
         # TODO: every port here is treated as depth=1 ports
         def connect(umod, uport, dmod, dport):
-            assert dport not in dmod.up
-            if uport not in umod.down:
-                stream = umod.down[uport] = Stream(self, umod, uport)
-            else:
-                stream = umod.down[uport]
-            dmod.up[dport] = stream.new_consumer(dmod, dport)
+            stream = umod.get_output_port(uport)
+            dmod.set_input_port(dport, stream)
 
         m0 = InstantiatedModule(self, basic.Constant,
                                 {'value': '/etc/resolv.conf'})
