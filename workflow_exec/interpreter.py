@@ -1,5 +1,7 @@
+import contextlib
 import itertools
 from logging import getLogger
+import traceback
 
 from workflow_exec.module import FinishReason
 
@@ -44,27 +46,51 @@ class InstantiatedModule(object):
             logger.debug("Adding StartTask for %r", self)
             self._interpreter.task_queue.append(StartTask(self))
 
+    @contextlib.contextmanager
+    def _call_guard(self, description=None, finishing=False):
+        try:
+            yield
+            if not (finishing or
+                    self._expected_input or self._expect_to_output):
+                raise RuntimeError(
+                    "Module isn't waiting for any event but isn't finished%s",
+                    " (%s)" % description if description is not None else '')
+        except Exception:
+            tb1 = traceback.format_exc()
+            tb2 = None
+            if not finishing:
+                try:
+                    self.do_finish(FinishReason.TERMINATE)
+                except Exception:
+                    tb2 = traceback.format_exc()
+            logger.debug("Terminating %r because it raise an exception:\n%s",
+                         tb1)
+            if tb2 is not None:
+                logger.debug("Additionally, while terminating the module, "
+                             "the following exeption was raised:\n%s",
+                             tb2)
+
     def do_start(self):
         if self._instance is not None:
             return
 
         logger.debug("%r starting", self)
 
-        self._instance = self._class(self._parameters, self)
-        self._instance.start()
+        with self._call_guard("starting module"):
+            self._instance = self._class(self._parameters, self)
+            self._instance.start()
         self._interpreter.started_modules.add(self)
 
-        if not self._expected_input and not self._expect_to_output:
-            raise RuntimeError("Module isn't waiting for any event but isn't "
-                               "finished (after do_start())")
-
     def do_input(self, port, values):
-        self._instance.input_list(port, values)
+        with self._call_guard("feeding input"):
+            self._instance.input_list(port, values)
 
     def do_step(self):
-        self._instance.step()
+        self._expect_to_output = False
+        with self._call_guard("calling step"):
+            self._instance.step()
 
-    def do_finish(self, reason):
+    def do_finish(self, reason, raise_=False):
         if self._finished:
             return
 
@@ -74,7 +100,11 @@ class InstantiatedModule(object):
             logger.debug("%r removed", self)
             self._interpreter.started_modules.remove(self)
             self._finished = True
-        self._instance.finish(reason)
+        if raise_:
+            self._instance.finish(reason)
+        else:
+            with self._call_guard("calling finish", finishing=True):
+                self._instance.finish(reason)
 
     def module_step_unimplemented(self):
         logger.debug("%r doesn't implement step()...", self)
@@ -130,7 +160,8 @@ class InstantiatedModule(object):
 
     def upstream_end(self, port):
         logger.debug("stream finished: %r, input port %r", self, port)
-        self._instance.input_end(port)
+        with self._call_guard("calling input_end"):
+            self._instance.input_end(port)
 
         # If all upstream streams are done, do finish(ALL_OUTPUT_DONE)
         for port, endpoint in self.up.iteritems():
@@ -138,7 +169,8 @@ class InstantiatedModule(object):
                 return
 
         logger.debug("all input done")
-        self._instance.all_input_end()
+        with self._call_guard("calling all_input_end"):
+            self._instance.all_input_end()
 
     def downstream_end(self, port):
         logger.debug("stream finished: %r, output port %r", self, port)

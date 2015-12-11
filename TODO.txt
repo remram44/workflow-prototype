@@ -1,8 +1,3 @@
-handle end of execution
-    call finish() on modules
-    handle closing streams
-    detect modules that forgot to call _finish()
-
 handle errors
     wrap calls on Module instance through InstanciatedModule
     notify interpreter of error and finish modules
