@@ -241,6 +241,7 @@ class Stream(object):
         logger.debug("Closing %r", self)
         self.producing = False
         for endpoint in list(self.consumers):
+            # FIXME: this happens too early - wait for consumers to read
             endpoint.consumer_module.upstream_end(endpoint.consumer_port)
 
     def remove_consumer(self, endpoint):
