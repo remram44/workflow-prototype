@@ -29,11 +29,25 @@ class InstantiatedModule(object):
         self._class = class_
         self._instance = None
 
+        # The input this module has already requested, that we should deliver
+        # it as soon as it is available. Tasks have already been created for
+        # these
         self._expected_input = {}
+        # A call to module_produces_output() returned False, and an OutputTask
+        # task has already been added to the interpreter
         self._expect_to_output = False
+        # This module is done and shouldn't do anything anymore
         self._finished = False
 
     def start(self):
+        if self._instance is None:
+            logger.debug("Adding StartTask for %r", self)
+            self._interpreter.task_queue.append(StartTask(self))
+
+    def do_start(self):
+        if self._instance is not None:
+            return
+
         logger.debug("%r starting", self)
 
         self._instance = self._class(self._parameters, self)
@@ -42,7 +56,25 @@ class InstantiatedModule(object):
 
         if not self._expected_input and not self._expect_to_output:
             raise RuntimeError("Module isn't waiting for any event but isn't "
-                               "finished (after start())")
+                               "finished (after do_start())")
+
+    def do_input(self, port, values):
+        self._instance.input_list(port, values)
+
+    def do_step(self):
+        self._instance.step()
+
+    def do_finish(self, reason):
+        if self._finished:
+            return
+
+        logger.debug("%r finished, reason=%s", self, reason)
+
+        if reason != FinishReason.ALL_OUTPUT_DONE:
+            logger.debug("%r removed", self)
+            self._interpreter.started_modules.remove(self)
+            self._finished = True
+        self._instance.finish(reason)
 
     def module_step_unimplemented(self):
         logger.debug("%r doesn't implement step()...", self)
@@ -96,18 +128,6 @@ class InstantiatedModule(object):
         self._interpreter.task_queue.append(
             FinishTask(self, FinishReason.CALLED_FINISH))
 
-    def finish(self, reason):
-        if self._finished:
-            return
-
-        logger.debug("%r finished, reason=%s", self, reason)
-
-        if reason != FinishReason.ALL_OUTPUT_DONE:
-            logger.debug("%r removed", self)
-            self._interpreter.started_modules.remove(self)
-            self._finished = True
-        self._instance.finish(reason)
-
     def upstream_end(self, port):
         logger.debug("stream finished: %r, input port %r", self, port)
         self._instance.input_end(port)
@@ -149,6 +169,8 @@ class Stream(object):
         self.producer_module = producer_module
         self.producer_port = producer_port
 
+        # The producing module is waiting for this stream to clear out. An
+        # OutputTask is to be created once space becomes available
         self.waiting = False
 
         # Whether this stream is still open; True until the producer finishes
@@ -158,6 +180,7 @@ class Stream(object):
         self.consumers = set()
         self.position = 0
 
+        # The buffer contains elements from `position` onwards
         self.buffer = []
         self.target_size = 1
 
@@ -255,11 +278,7 @@ class StreamOutput(object):
             self.waiting = True
         self.requested = True
 
-        if self.stream.producer_module._instance is None:  # no
-            logger.debug("%r not yet instantiated, adding StartTask",
-                         self.stream.producer_module)
-            self.stream.interpreter.task_queue.append(
-                StartTask(self.stream.producer_module))
+        self.stream.producer_module.start()
 
     def close(self):
         logger.debug("Closing %r", self)
@@ -288,8 +307,7 @@ class StartTask(Task):
         self._module = module
 
     def execute(self):
-        if self._module._instance is None:  # no
-            self._module.start()
+        self._module.do_start()
 
     def __repr__(self):
         return "StartTask(module=%r)" % self._module
@@ -327,17 +345,13 @@ class InputTask(Task):
                          stream.position + len(stream.buffer))
             feed = stream.buffer[endpoint.position - stream.position:]
             endpoint.position = stream.position + len(stream.buffer)
-            module._instance.input_list(  # no
-                port,
-                feed)
+            module.do_input(port, feed)
         else:
             logger.debug("Feeding one input to %r, port %r: %d",
                          module, port, endpoint.position)
             feed = [stream.buffer[endpoint.position - stream.position]]
             endpoint.position += 1
-            module._instance.input_list(  # no
-                port,
-                feed)
+            module.do_input(port, feed)
 
         stream.compact()
 
@@ -355,7 +369,7 @@ class OutputTask(Task):
         self._module = module
 
     def execute(self):
-        self._module._instance.step()  # no
+        self._module.do_step()
 
     def __repr__(self):
         return "OutputTask(module=%r)" % self._module
@@ -373,7 +387,7 @@ class FinishTask(Task):
         self._reason = reason
 
     def execute(self):
-        self._module.finish(self._reason)
+        self._module.do_finish(self._reason)
 
     def __repr__(self):
         return "FinishTask(module=%r, %r)" % (self._module, self._reason)
@@ -437,4 +451,4 @@ class Interpreter(object):
                          ' '.join('%d' % m.instance_id
                                   for m in self.started_modules))
             for module in list(self.started_modules):
-                module.finish(FinishReason.TERMINATE)
+                module.do_finish(FinishReason.TERMINATE)
