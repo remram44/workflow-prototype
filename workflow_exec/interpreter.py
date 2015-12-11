@@ -47,10 +47,10 @@ class InstantiatedModule(object):
             self._interpreter.task_queue.append(StartTask(self))
 
     @contextlib.contextmanager
-    def _call_guard(self, description=None, finishing=False):
+    def _call_guard(self, description=None):
         try:
             yield
-            if not (finishing or
+            if not (self._finished or
                     self._expected_input or self._expect_to_output):
                 raise RuntimeError(
                     "Module isn't waiting for any event but isn't finished%s",
@@ -58,7 +58,7 @@ class InstantiatedModule(object):
         except Exception:
             tb1 = traceback.format_exc()
             tb2 = None
-            if not finishing:
+            if not self._finished:
                 try:
                     self.do_finish(FinishReason.TERMINATE)
                 except Exception:
@@ -76,10 +76,10 @@ class InstantiatedModule(object):
 
         logger.debug("%r starting", self)
 
+        self._interpreter.started_modules.add(self)
         with self._call_guard("starting module"):
             self._instance = self._class(self._parameters, self)
             self._instance.start()
-        self._interpreter.started_modules.add(self)
 
     def do_input(self, port, values):
         with self._call_guard("feeding input"):
@@ -103,7 +103,7 @@ class InstantiatedModule(object):
         if raise_:
             self._instance.finish(reason)
         else:
-            with self._call_guard("calling finish", finishing=True):
+            with self._call_guard("calling finish"):
                 self._instance.finish(reason)
 
     def module_step_unimplemented(self):
@@ -164,6 +164,8 @@ class InstantiatedModule(object):
             self._instance.input_end(port)
 
         # If all upstream streams are done, do finish(ALL_OUTPUT_DONE)
+        if self._finished:
+            return
         for port, endpoint in self.up.iteritems():
             if endpoint.stream.producing:
                 return
