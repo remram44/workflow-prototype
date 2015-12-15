@@ -31,9 +31,10 @@ class InstantiatedModule(object):
         self._class = class_
         self._instance = None
 
+        # The input ports that are not done yet -- used to call all_input_end()
         self._inputs_producing = set()
         # The input this module has already requested, that we should deliver
-        # it as soon as it is available. Tasks have already been created for
+        # to it as soon as it is available. Tasks have already been created for
         # these
         self._expected_input = {}
         # A call to module_produces_output() returned False, and an OutputTask
@@ -41,11 +42,6 @@ class InstantiatedModule(object):
         self._expect_to_output = False
         # This module is done and shouldn't do anything anymore
         self._finished = False
-
-    def start(self):
-        if self._instance is None:
-            logger.debug("Adding StartTask for %r", self)
-            self._interpreter.task_queue.append(StartTask(self))
 
     def get_output_port(self, port):
         if port not in self.down:
@@ -61,14 +57,13 @@ class InstantiatedModule(object):
             self._inputs_producing.add(port)
 
     @contextlib.contextmanager
-    def _call_guard(self, description=None):
+    def _call_guard(self, description):
         try:
             yield
             if not (self._finished or
                     self._expected_input or self._expect_to_output):
-                raise RuntimeError(
-                    "Module isn't waiting for any event but isn't finished%s",
-                    " (%s)" % description if description is not None else '')
+                raise RuntimeError("%r isn't waiting for any event but isn't "
+                                   "finished (%s)" % (self, description))
         except Exception:
             tb1 = traceback.format_exc()
             tb2 = None
@@ -77,12 +72,17 @@ class InstantiatedModule(object):
                     self.do_finish(FinishReason.TERMINATE)
                 except Exception:
                     tb2 = traceback.format_exc()
-            logger.debug("Terminating %r because it raise an exception:\n%s",
-                         tb1)
+            logger.debug("Terminating %r because it raised an exception (%s):"
+                         "\n%s", self, description, tb1)
             if tb2 is not None:
                 logger.debug("Additionally, while terminating the module, "
-                             "the following exeption was raised:\n%s",
+                             "the following exception was raised:\n%s",
                              tb2)
+
+    def start(self):
+        if self._instance is None:
+            logger.debug("Adding StartTask for %r", self)
+            self._interpreter.task_queue.append(StartTask(self))
 
     def do_start(self):
         if self._instance is not None:
@@ -181,9 +181,9 @@ class InstantiatedModule(object):
         with self._call_guard("calling input_end"):
             self._instance.input_end(port)
 
-        # If all upstream streams are done, do finish(ALL_OUTPUT_DONE)
+        # If all upstream streams are done, do all_input_end()
         if self._finished or self._inputs_producing:
-                return
+            return
 
         logger.debug("all input done")
         with self._call_guard("calling all_input_end"):
@@ -382,7 +382,9 @@ class InputTask(Task):
         logger.debug("%r.waiting = False", self)
         endpoint.waiting = False
         endpoint.requested = False
-        all_available = module._expected_input.pop(port)
+        all_available = module._expected_input.pop(port, None)
+        if all_available is None:
+            return
         logger.debug("endpoint: %d, stream: %d-%d",
                      endpoint.position,
                      stream.position, stream.position + len(stream.buffer))
