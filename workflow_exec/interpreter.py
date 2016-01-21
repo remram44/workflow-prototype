@@ -69,17 +69,17 @@ class InstantiatedModule(object):
         except Exception:
             tb = traceback.format_exc()
             if not self._finish_called:
-                logger.debug("Terminating %r because it raised an exception "
+                logger.error("Terminating %r because it raised an exception "
                              "(%s):\n%s",
                              self, description, tb)
                 try:
                     self.do_finish(FinishReason.TERMINATE)
                 except Exception:
-                    logger.debug("Additionally, while terminating the module, "
+                    logger.error("Additionally, while terminating the module, "
                                  "the following exception was raised:\n%s",
                                  traceback.format_exc())
             else:
-                logger.debug("Got an exception from %r (%s):\n%s",
+                logger.error("Got an exception from %r (%s):\n%s",
                              self, description, tb)
 
     def start(self):
@@ -114,6 +114,15 @@ class InstantiatedModule(object):
         logger.debug("%r finished, reason=%s", self, reason)
 
         if reason != FinishReason.ALL_OUTPUT_DONE:
+            # Close down streams
+            for port, stream in self.down.iteritems():
+                stream.close()
+
+            # Close up streams
+            for port, endpoint in self.up.iteritems():
+                endpoint.close()
+
+            # Remove module
             logger.debug("%r removed", self)
             self._interpreter.started_modules.remove(self)
             self._finished = self._finish_called = True
@@ -258,6 +267,8 @@ class Stream(object):
         return len(self.buffer) < self.target_size
 
     def close(self):
+        if not self.producing:
+            return
         logger.debug("Closing %r", self)
         self.producing = False
         for endpoint in list(self.consumers):
@@ -266,6 +277,8 @@ class Stream(object):
                 self.interpreter.task_queue.append(InputTask(endpoint))
 
     def remove_consumer(self, endpoint):
+        if endpoint not in self.consumers:
+            return
         self.consumers.remove(endpoint)
         if not self.consumers:
             self.producer_module.downstream_end(self.producer_port)
@@ -327,7 +340,7 @@ class StreamOutput(object):
                      "available" if available - self.position > 0
                      else "not available",
                      self.position, self.stream.position, available)
-        if available - self.position > 0:
+        if available - self.position > 0 or not self.stream.producing:
             self.stream.interpreter.task_queue.append(InputTask(self))
         if not self.requested:
             logger.debug("%r.waiting = True", self)

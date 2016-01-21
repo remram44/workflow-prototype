@@ -46,7 +46,7 @@ class Module(object):
         """There is no port left they might still receive input.
 
         If this module produces data in `input()`, you should probably call
-        `_finish()`. If this module is a collecter, it has received all the
+        `_finish()`. If this module is a collector, it has received all the
         input and can now produce its result.
         """
 
