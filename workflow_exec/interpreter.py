@@ -42,6 +42,8 @@ class InstantiatedModule(object):
         self._expect_to_output = False
         # This module is done and shouldn't do anything anymore
         self._finished = False
+        # Module's finish() was called
+        self._finish_called = False
 
     def get_output_port(self, port):
         if port not in self.down:
@@ -65,19 +67,20 @@ class InstantiatedModule(object):
                 raise RuntimeError("%r isn't waiting for any event but isn't "
                                    "finished (%s)" % (self, description))
         except Exception:
-            tb1 = traceback.format_exc()
-            tb2 = None
-            if not self._finished:
+            tb = traceback.format_exc()
+            if not self._finish_called:
+                logger.debug("Terminating %r because it raised an exception "
+                             "(%s):\n%s",
+                             self, description, tb)
                 try:
                     self.do_finish(FinishReason.TERMINATE)
                 except Exception:
-                    tb2 = traceback.format_exc()
-            logger.debug("Terminating %r because it raised an exception (%s):"
-                         "\n%s", self, description, tb1)
-            if tb2 is not None:
-                logger.debug("Additionally, while terminating the module, "
-                             "the following exception was raised:\n%s",
-                             tb2)
+                    logger.debug("Additionally, while terminating the module, "
+                                 "the following exception was raised:\n%s",
+                                 traceback.format_exc())
+            else:
+                logger.debug("Got an exception from %r (%s):\n%s",
+                             self, description, tb)
 
     def start(self):
         if self._instance is None:
@@ -105,7 +108,7 @@ class InstantiatedModule(object):
             self._instance.step()
 
     def do_finish(self, reason, raise_=False):
-        if self._finished:
+        if self._finish_called:
             return
 
         logger.debug("%r finished, reason=%s", self, reason)
@@ -113,7 +116,7 @@ class InstantiatedModule(object):
         if reason != FinishReason.ALL_OUTPUT_DONE:
             logger.debug("%r removed", self)
             self._interpreter.started_modules.remove(self)
-            self._finished = True
+            self._finished = self._finish_called = True
         if raise_:
             self._instance.finish(reason)
         else:
@@ -160,6 +163,7 @@ class InstantiatedModule(object):
     def module_reports_finish(self):
         if self._finished:
             return
+        self._finished = True
 
         logger.debug("%r reports finish", self)
 
@@ -181,13 +185,10 @@ class InstantiatedModule(object):
         with self._call_guard("calling input_end"):
             self._instance.input_end(port)
 
-        # If all upstream streams are done, do all_input_end()
-        if self._finished or self._inputs_producing:
-            return
-
-        logger.debug("all input done")
-        with self._call_guard("calling all_input_end"):
-            self._instance.all_input_end()
+            # If all upstream streams are done, do all_input_end()
+            logger.debug("all input done")
+            if not self._finished and not self._inputs_producing:
+                self._instance.all_input_end()
 
     def downstream_end(self, port):
         logger.debug("stream finished: %r, output port %r", self, port)
