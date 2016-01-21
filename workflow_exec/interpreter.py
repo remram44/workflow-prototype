@@ -192,6 +192,8 @@ class InstantiatedModule(object):
 
     def downstream_end(self, port):
         logger.debug("stream finished: %r, output port %r", self, port)
+        if self._finished:
+            return
         if all(not stream.consumers for port, stream in self.down.iteritems()):
             logger.debug("every down stream is finished, delivering "
                          "ALL_OUTPUT_DONE")
@@ -259,8 +261,9 @@ class Stream(object):
         logger.debug("Closing %r", self)
         self.producing = False
         for endpoint in list(self.consumers):
-            # FIXME: this happens too early - wait for consumers to read
-            endpoint.consumer_module.upstream_end(endpoint.consumer_port)
+            if endpoint.waiting:
+                endpoint.waiting = False
+                self.interpreter.task_queue.append(InputTask(endpoint))
 
     def remove_consumer(self, endpoint):
         self.consumers.remove(endpoint)
@@ -391,7 +394,10 @@ class InputTask(Task):
         logger.debug("endpoint: %d, stream: %d-%d",
                      endpoint.position,
                      stream.position, stream.position + len(stream.buffer))
-        if all_available:
+        if (endpoint.position == stream.position + len(stream.buffer) and
+                not stream.producing):
+            module.upstream_end(port)
+        elif all_available:
             logger.debug("Feeding all input to %r, port %r: "
                          "%d elements, %d-%d",
                          module, port,
