@@ -60,6 +60,7 @@ class InstantiatedModule(object):
 
     @contextlib.contextmanager
     def _call_guard(self, description):
+        logger.debug("+_call_guard %r %s" % (self, description))
         try:
             yield
             if not (self._finished or
@@ -81,6 +82,7 @@ class InstantiatedModule(object):
             else:
                 logger.debug("Got an exception from %r (%s):\n%s",
                              self, description, tb)
+        logger.debug("-_call_guard %r %s" % (self, description))
 
     def start(self):
         if self._instance is None:
@@ -206,9 +208,13 @@ class Stream(object):
     """A stream between two ports.
 
     This is the connection between one producer and multiple consumers. It is
-    essentially a buffer.
+    essentially a buffer, implemented as a buffer of lists to avoid
+    concatenating the user-supplied arrays. EndOfStream indicates the end.
     """
     _id_gen = itertools.count()
+
+    # Sentinel
+    EndOfStream = object()
 
     def __init__(self, interpreter, producer_module, producer_port):
         self.stream_id = next(self._id_gen)
@@ -243,22 +249,23 @@ class Stream(object):
     def push(self, values):
         if not self.consumers:
             return
+        if not self.producing:
+            raise RuntimeError("Attempt to write to a closed stream")
 
-        self.buffer.extend(values)
+        self.buffer.append(values)
+        self.size += len(values)
 
         for endpoint in self.consumers:
             if endpoint.waiting:
                 endpoint.waiting = False
                 self.interpreter.task_queue.append(InputTask(endpoint))
 
-        return len(self.buffer) < self.target_size
+        return self.size < self.target_size
 
     def close(self):
         logger.debug("Closing %r", self)
         self.producing = False
-        for endpoint in list(self.consumers):
-            # FIXME: this happens too early - wait for consumers to read
-            endpoint.consumer_module.upstream_end(endpoint.consumer_port)
+        self.buffer.append(Stream.EndOfStream)
 
     def remove_consumer(self, endpoint):
         self.consumers.remove(endpoint)
