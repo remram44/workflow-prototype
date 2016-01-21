@@ -243,6 +243,8 @@ class Stream(object):
     def push(self, values):
         if not self.consumers:
             return
+        if not self.producing:
+            raise RuntimeError("Attempt to write to a closed stream")
 
         self.buffer.extend(values)
 
