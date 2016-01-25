@@ -7,7 +7,7 @@ TODO: once this is integrated in VisTrails, they should be replaced by the
 basic_modules package, to which some of the present modules will be added.
 """
 
-from workflow_exec.module import FinishReason, Module
+from workflow_exec.vistrails_module.v3 import FinishReason, Module
 
 
 class Constant(Module):
