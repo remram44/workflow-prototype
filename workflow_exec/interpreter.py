@@ -30,6 +30,7 @@ from logging import getLogger
 import traceback
 
 from workflow_exec.module import FinishReason
+from workflow_exec.looping import ModuleLoop
 
 
 logger = getLogger('interpreter')
