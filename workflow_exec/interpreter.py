@@ -1,3 +1,29 @@
+"""Pipeline scheduling and execution logic.
+
+This is the actual interpreter, creating and executing Module subclasses as
+data flows.
+
+Basically driven by the Stream objects: the interpreter has a list of tasks
+that it executes in order; when a stream gets full, a task to resume production
+once it isn't gets created; when a stream gets empty, a task to produce more
+data on it gets created.
+
+TODO: tasks should have enough constraints to allow multiprocessing through
+task-stealing, allowing full parallel execution.
+
+InstantiatedModule wraps a Module, keeping track of current state, requested
+inputs, input and output streams' statuses.
+
+Stream is a single-producer multiple-consumer queue that connects module ports,
+creating tasks with the Interpreter when needed.
+
+Task is the base class for things to be done, added to a queue in the
+Interpreter.
+
+Interpreter contains the execution loop, dequeuing a Task and executing it
+until the queue gets emptied.
+"""
+
 import contextlib
 import itertools
 from logging import getLogger

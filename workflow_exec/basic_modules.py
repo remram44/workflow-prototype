@@ -1,3 +1,12 @@
+"""Example modules.
+
+Example implementations of the Module interface, currently used to test the
+scheduler.
+
+TODO: once this is integrated in VisTrails, they should be replaced by the
+basic_modules package, to which some of the present modules will be added.
+"""
+
 from workflow_exec.module import FinishReason, Module
 
 

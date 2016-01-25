@@ -1,3 +1,11 @@
+"""@inline_module decorator definition.
+
+This provides the inline API on top of the Module interface. Using the
+@inline_module decorator adapts a generator into a correct Module subclass,
+allowing developers to write a simple generator function instead of
+implementing Module directly.
+"""
+
 from workflow_exec.module import Module, FinishReason as _FinishReason
 
 

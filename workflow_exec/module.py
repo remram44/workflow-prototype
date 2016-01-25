@@ -1,4 +1,26 @@
+"""Module interface.
+
+This is the interface that Modules implement to be executable by the VisTrails
+interpreter. It is exposed as vistrails_module.v3, and previous versions are
+implemented on top of this (as adaptors).
+"""
+
 class FinishReason(object):
+    """Enumeration of reasons, passed to Module#finish().
+
+    This indicates why the Module is done.
+
+    TERMINATE means that it was forcibly terminated by the interpreter, either
+    because of an error (from this module or another) or by user request.
+    CALLED_FINISH means that this module called _finish() and thus completed
+    normally; some cleaning up can be done here before execution ends.
+    ALL_OUTPUT_DONE means that no downstream module is reading what this module
+    is outputting anymore, and while it is unusual for modules to act this way,
+    we can finish execution faster by stopping execution here.
+
+    Note: if this modules chooses to terminate early after ALL_OUTPUT_DONE, it
+    should still call _finish(). finish(CALLED_FINISH) will then be triggered.
+    """
     TERMINATE = 1
     ALL_OUTPUT_DONE = 2
     CALLED_FINISH = 3
@@ -6,6 +28,36 @@ class FinishReason(object):
 
 class Module(object):
     """Base class for Python module implementations.
+
+    This is basically a stream processor, producing output as input is
+    received.
+
+    The following methods can be used:
+      - _request_input() to ask for input on a specific port (no input will be
+        delivered to the Module unless this has been called first)
+      - _output() to produce an output on a specific port (returns False if we
+        should stop outputting to let other modules consume, and resume
+        production in step())
+      - _output_list() to produce a list of outputs instead of a single element
+      - _finish() to signal this module is done. Connected modules will get
+        notified and pipeline execution will end once each module has finished.
+
+    The following methods can be implemented:
+      - start() is the entry point, which should probably call _request_input()
+        for the input ports so that input() gets called back.
+      - input() provides the module with data from an input port.
+      - input_list() provides the module with a list of elements from an input
+        port, and allows modules to handle a full chunk of data at once. Always
+        faster than waiting for elements one by one, especially useful when
+        vectorizing (e.g. using numpy arrays)
+      - input_end() indicates that an input port is done (upstream module is
+        finished)
+      - all_input_end() indicates that all input ports are done (input_end()
+        have been called for all of them)
+      - step() requests more output, and will be called if _output() ever
+        returned False.
+      - finish() is called when this module ends, and can be used to free
+        resources, close files, ...
     """
     def __init__(self, parameters, interface):
         """Constructor.
