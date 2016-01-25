@@ -3,7 +3,10 @@
 This package contains the different versions of the Module API, on top of which
 Modules are implemented. It is versioned so that changes in the API or the
 interpreter are possible without breaking existing package code (just create a
-new version).
+new version). A wrapper is used to wrap these into the current Module
+interface, so that we don't have to do too much magic with metaclasses;
+therefore specific versions register themselves with the CompatibilityLayer
+singleton.
 """
 
 # Version history:
@@ -15,4 +18,7 @@ new version).
 #       note: supported by v2.Module with DeprecationWarning
 
 # Modules that import from here directly get v2
-from .v2 import Module
+from .v2 import ModuleError, ModuleSuspended, Module, NotCacheable, \
+    Streaming, Converter, new_module
+
+from .registrar import CompatibilityLayer
