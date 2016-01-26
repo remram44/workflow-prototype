@@ -215,7 +215,7 @@ class Format(Module):
         self._finish()
 
 
-from workflow_exec.inline_module import inline_module, EndOfInput
+from workflow_exec.vistrails_module.v3 import inline_module, EndOfInput
 
 
 @inline_module

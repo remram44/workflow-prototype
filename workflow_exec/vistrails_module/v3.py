@@ -2,7 +2,10 @@
 """
 
 from workflow_exec.module import FinishReason, Module
-from workflow_exec.inline_module import inline_module
+from workflow_exec.inline_module import inline_module, \
+    EndOfInput, FinishExecution, ExecutionTerminated, AllOutputDone
 
 
-__all__ = ['Module', 'inline_module']
+__all__ = ['FinishReason', 'Module',
+           'inline_module', 'EndOfInput', 'FinishExecution',
+           'ExecutionTerminated', 'AllOutputDone']
