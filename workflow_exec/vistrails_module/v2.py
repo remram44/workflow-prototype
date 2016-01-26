@@ -345,18 +345,32 @@ class NotCacheable(object):
 
 
 class Streaming(object):
-    # TODO
-    pass
+    """Mixin indicating support for old-style streaming, unsupported.
+
+    Using this in your code will trigger an error on VisTrails 3.
+    """
 
 
 class Converter(object):
+    """Base class for automatic conversion modules.
+    """
     # TODO
-    pass
+    # This is basically just a module with in_value and out_value ports, which
+    # also provides a
+    # can_convert(sub:[ModuleDescriptor], super:[ModuleDescriptor]) for the
+    # registry to test when to insert it.
+    @classmethod
+    def can_convert(cls, sub_descs, super_descs):
+        pass
 
 
-def new_module():
-    # TODO
-    pass
+def new_module(base_module, name, class_dict={}, docstring=None):
+    bases = (base_module if isinstance(base_module, (list, tuple))
+             else [base_module])
+    class_dict = dict(class_dict)
+    if docstring:
+        class_dict['__doc__'] = docstring
+    return type(name, bases, class_dict)
 
 
 class Version2Adapter(NewModule):
@@ -381,11 +395,16 @@ def version2_adapter(module_class):
     if hasattr(module_class, 'transfer_attrs'):
         warnings.warn("API v2 Module uses transfer_attrs: %r. This is "
                       "probably not going to work as expected", module_class)
-    for bad_field in ('update_upstream', 'updateUpstream', 'update_upstream_port', 'updateUpstreamPort', 'update'):
+    for bad_field in ('update_upstream', 'updateUpstream',
+                      'update_upstream_port', 'updateUpstreamPort', 'update'):
         if getattr(module_class, bad_field, None) is not None:
             warnings.warn("API v2 Module uses %s: %r. This "
                           "is not going to work as expected",
                           bad_field, module_class)
+    if issubclass(module_class, Streaming):
+        warnings.warn("API v2 Module inherits Streaming: %r. This is not "
+                      "going to work as expected",
+                      module_class)
     # TODO: is_cacheable
 
     adapter = type(module_class.__name__, (Version2Adapter,),
