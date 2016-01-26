@@ -9,18 +9,18 @@ from .registrar import CompatibilityLayer
 
 def deprecated(new_func):
     def wrapper(func):
-        # TODO
+        # INTEGRATION: replace with actual @deprecated wrapper
         return func
     return wrapper
 
 
 class ModuleError(Exception):
-    # TODO
+    # INTEGRATION: figure out exception classes
     pass
 
 
 class ModuleSuspended(ModuleError):
-    # TODO
+    # INTEGRATION: figure out exception classes
     pass
 
 
@@ -354,7 +354,7 @@ class Streaming(object):
 class Converter(object):
     """Base class for automatic conversion modules.
     """
-    # TODO
+    # INTEGRATION: we definitely want Converter to keep working
     # This is basically just a module with in_value and out_value ports, which
     # also provides a
     # can_convert(sub:[ModuleDescriptor], super:[ModuleDescriptor]) for the

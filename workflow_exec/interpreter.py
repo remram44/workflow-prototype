@@ -316,7 +316,7 @@ class Stream(object):
         self.waiting = True
 
     def compact(self):
-        # FIXME: optimize
+        # FIXME: optimize Stream#compact()
         pos = None
         for endpoint in self.consumers:
             if pos is None:
