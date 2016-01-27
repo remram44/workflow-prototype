@@ -231,6 +231,34 @@ def ZipLongest(module):
                 yield module.output('zip', (left, None))
 
 
+@inline_module
+def AddNumbers(module):
+    import numpy
+
+    buf_a, buf_b = [], []
+    while True:
+        new_a, new_b = yield module.get_input('a', 'b',
+                                              all_available=True)
+        common = min(len(buf_a) + len(new_a),
+                     len(buf_b) + len(new_b))
+        if len(buf_a) < common:
+            split = common - len(buf_a)
+            a = buf_a + new_a[:split]
+            buf_a = new_a[split:]
+        else:
+            a = buf_a[:common]
+            buf_a = buf_a[common:] + new_a
+        if len(buf_b) < common:
+            split = common - len(buf_b)
+            b = buf_b + new_b[:split]
+            buf_b = new_b[split:]
+        else:
+            b = buf_b[:common]
+            buf_b = buf_b[common:] + new_b
+        r = numpy.add(a, b)
+        yield module.output_list('result', r)
+
+
 from workflow_exec.vistrails_module.v2 import Module as OldModule
 
 
