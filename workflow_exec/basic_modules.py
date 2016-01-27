@@ -259,6 +259,31 @@ def AddNumbers(module):
         yield module.output_list('result', r)
 
 
+class AddNumber(Module):
+    a = None
+    b = None
+
+    def start(self):
+        self._request_input('a')
+        self._request_input('b')
+
+    def input(self, port, value):
+        if port == 'a':
+            self.a = value
+        elif port == 'b':
+            self.b = value
+        else:
+            super(AddNumber, self).input(port, value)
+
+        if self.a is not None and self.b is not None:
+            self.do_it(self.a, self.b)
+            self._finish()
+
+    def do_it(self, a, b):
+        self._output('r', a + b)
+        self._finish()
+
+
 from workflow_exec.vistrails_module.v2 import Module as OldModule
 
 
