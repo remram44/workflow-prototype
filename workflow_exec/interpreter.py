@@ -365,14 +365,15 @@ class StreamOutput(object):
                      "available" if available - self.position > 0
                      else "not available",
                      self.position, self.stream.position, available)
+
+        self.stream.producer_module.start()
+
         if available - self.position > 0 or not self.stream.producing:
             self.stream.interpreter.task_queue.append(InputTask(self))
         if not self.requested:
             logger.debug("%r.waiting = True", self)
             self.waiting = True
         self.requested = True
-
-        self.stream.producer_module.start()
 
     def close(self):
         logger.debug("Closing %r", self)
