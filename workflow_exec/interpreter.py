@@ -172,8 +172,6 @@ class InstantiatedModule(object):
         self.module_reports_finish()
 
     def module_requests_input(self, port, all_available):
-        if port not in self._inputs_producing:
-            return
         if all_available:
             logger.debug("%r requests all available input on port %r",
                          self, port)
