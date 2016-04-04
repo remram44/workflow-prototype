@@ -520,21 +520,21 @@ class Interpreter(object):
             stream = Stream.constants(self, values)
             dmod.set_input_port(dport, stream)
 
-        m1 = InstantiatedModule(self, basic.ReadFile)
-        constants(['/etc/resolv.conf'], m1, 'path')
-        m2 = InstantiatedModule(self, basic.Count)
-        connect(m1, 'line', m2, 'data')
-        m3 = InstantiatedModule(self, basic.RandomNumbers)
-        m4 = InstantiatedModule(self, basic.Zip)
-        connect(m1, 'line', m4, 'left')
-        connect(m3, 'number', m4, 'right')
+        m0 = InstantiatedModule(self, basic.ReadFile)
+        constants(['/etc/resolv.conf'], m0, 'path')
+        m1 = InstantiatedModule(self, basic.Count)
+        connect(m0, 'line', m1, 'data')
+        m2 = InstantiatedModule(self, basic.RandomNumbers)
+        m3 = InstantiatedModule(self, basic.Zip)
+        connect(m0, 'line', m3, 'left')
+        connect(m2, 'number', m3, 'right')
 
+        m4 = InstantiatedModule(self, basic.StandardOutput)
+        connect(m1, 'length', m4, 'data')
         m5 = InstantiatedModule(self, basic.StandardOutput)
-        connect(m2, 'length', m5, 'data')
-        m6 = InstantiatedModule(self, basic.StandardOutput)
-        connect(m4, 'zip', m6, 'data')
+        connect(m3, 'zip', m5, 'data')
 
-        sinks = [m5, m6]
+        sinks = [m4, m5]
         logger.debug("Fake pipeline created")
         # - FAKE PIPELINE
         # ####################
