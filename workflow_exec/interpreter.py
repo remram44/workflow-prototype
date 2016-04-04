@@ -270,6 +270,17 @@ class Stream(object):
         self.buffer = []
         self.target_size = 1
 
+    @classmethod
+    def constants(cls, interpreter, values):
+        stream = Stream(interpreter, None, None)
+        stream.producing = False
+        stream.buffer = values
+        return stream
+
+    @classmethod
+    def constant(cls, interpreter, value):
+        return cls.constants(interpreter, [value])
+
     def new_consumer(self, consumer_module, consumer_port):
         endpoint = StreamOutput(self, consumer_module, consumer_port)
         logger.debug("%r: new consumer: %r", self, endpoint)
@@ -305,7 +316,7 @@ class Stream(object):
         if endpoint not in self.consumers:
             return
         self.consumers.remove(endpoint)
-        if not self.consumers:
+        if not self.consumers and self.producer_module is not None:
             self.producer_module.downstream_end(self.producer_port)
 
     def wait_output(self):
@@ -366,7 +377,8 @@ class StreamOutput(object):
                      else "not available",
                      self.position, self.stream.position, available)
 
-        self.stream.producer_module.start()
+        if self.stream.producer_module is not None:
+            self.stream.producer_module.start()
 
         if available - self.position > 0 or not self.stream.producing:
             self.stream.interpreter.task_queue.append(InputTask(self))
@@ -504,10 +516,12 @@ class Interpreter(object):
             stream = umod.get_output_port(uport)
             dmod.set_input_port(dport, stream)
 
-        m0 = InstantiatedModule(self, basic.Constant,
-                                {'value': '/etc/resolv.conf'})
+        def constants(values, dmod, dport):
+            stream = Stream.constants(self, values)
+            dmod.set_input_port(dport, stream)
+
         m1 = InstantiatedModule(self, basic.ReadFile)
-        connect(m0, 'value', m1, 'path')
+        constants(['/etc/resolv.conf'], m1, 'path')
         m2 = InstantiatedModule(self, basic.Count)
         connect(m1, 'line', m2, 'data')
         m3 = InstantiatedModule(self, basic.RandomNumbers)

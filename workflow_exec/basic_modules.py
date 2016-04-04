@@ -10,14 +10,6 @@ basic_modules package, to which some of the present modules will be added.
 from workflow_exec.vistrails_module.v3 import FinishReason, Module
 
 
-class Constant(Module):
-    """Outputs a single value set as parameter.
-    """
-    def start(self):
-        self._output('value', self.parameters['value'])
-        self._finish()
-
-
 class Count(Module):
     """Counts the number of elements in the input stream.
     """
