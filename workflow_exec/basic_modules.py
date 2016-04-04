@@ -109,15 +109,17 @@ class RandomNumbers(Module):
 
 
 class Sample(Module):
-    """Lets one element through every N elements (configured with parameter).
+    """Lets one element through every N elements.
     """
     def start(self):
         self._pos = 1
-        self._rate = self.parameters['rate']
-        self._request_input('data')
+        self._request_input('rate')
 
     def input(self, port, value):
-        if port == 'data':
+        if port == 'rate':
+            self._rate = value
+            self._request_input('data')
+        elif port == 'data':
             if self._pos == self._rate:
                 self._pos = 1
                 self._output('sampled', value)
@@ -188,14 +190,16 @@ class AddPrevious(Module):
 
 
 class Format(Module):
-    """Formats elements using format string from parameters.
+    """Formats elements using format string.
     """
     def start(self):
-        self._format = self.parameters['format']
+        self._request_input('format')
         self._args = []
-        self._request_input('element')
 
     def input(self, port, value):
+        if port == 'format':
+            self._format = value
+            self._request_input('element')
         if port == 'element':
             self._args.append(value)
             self._request_input('element')
@@ -211,7 +215,7 @@ from workflow_exec.vistrails_module.v3 import inline_module, EndOfInput
 
 
 @inline_module
-def ZipLongest(module, parameters):
+def ZipLongest(module):
     try:
         while True:
             left, right = yield module.get_input('left', 'right')

@@ -59,21 +59,20 @@ class Module(object):
       - finish() is called when this module ends, and can be used to free
         resources, close files, ...
     """
-    def __init__(self, parameters, interface):
+    def __init__(self, interface):
         """Constructor.
 
         Modules shouldn't do any work here, and you should forward arguments to
         the base class if overriding it (or just use `start()` instead).
         """
-        self.parameters = parameters
         self._interface = interface
 
     def start(self):
         """Start execution.
 
-        This starts executing the module. You can read parameters, request
-        input and start output from here, then rely on the other events the
-        interpreter will trigger later.
+        This starts executing the module. You can request input and start
+        output from here, then rely on the other events the interpreter will
+        trigger later.
         """
         raise NotImplementedError
 

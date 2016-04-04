@@ -43,16 +43,12 @@ class InstantiatedModule(object):
     """
     _id_gen = itertools.count()
 
-    def __init__(self, interpreter, class_, parameters=None):
+    def __init__(self, interpreter, class_):
         self.instance_id = next(self._id_gen)
 
         logger.debug("%r created, class=%r", self, class_)
 
         self._interpreter = interpreter
-        if parameters is None:
-            self._parameters = {}
-        else:
-            self._parameters = parameters
         self.up = {}
         self.down = {}
         self._class = class_
@@ -122,7 +118,7 @@ class InstantiatedModule(object):
 
         self._interpreter.started_modules.add(self)
         with self._call_guard("starting module"):
-            self._instance = self._class(self._parameters, self)
+            self._instance = self._class(self)
             self._instance.start()
 
     def do_input(self, port, values):

@@ -65,8 +65,7 @@ class InlineModuleInterface(object):
 
 class InlineModule(Module):
     def start(self):
-        self._gen = self._func(InlineModuleInterface(self),
-                               self.parameters)
+        self._gen = self._func(InlineModuleInterface(self))
         # requested_ports, missing_ports, values
         self._input_request = None
         self._step(return_=None)
